@@ -1,34 +1,36 @@
 name: Build APK
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-build:
-runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest
 
-```
-steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Set up Flutter
-    uses: subosito/flutter-action@v2
-    with:
-      flutter-version: '3.24.5'
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
 
-  - name: Create Android project
-    run: flutter create .
+      - name: Create Android project
+        run: flutter create --platforms=android --project-name inspection_manager_app .
 
-  - name: Get dependencies
-    run: flutter pub get
+      - name: Get dependencies
+        run: flutter pub get
 
-  - name: Build APK
-    run: flutter build apk --release
+      - name: Build APK
+        run: flutter build apk --release
 
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: inspection_manager_apk
-      path: build/app/outputs/flutter-apk/app-release.apk
-```
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspection_manager_apk
+          path: build/app/outputs/flutter-apk/app-release.apk
