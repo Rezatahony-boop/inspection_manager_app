@@ -34,7 +34,101 @@ class InspectionManagerApp extends StatelessWidget {
 }
 
 // =====================================================
-// DATA MODEL
+// تبدیل تاریخ میلادی به شمسی
+// =====================================================
+
+String toPersianDigits(String text) {
+  const english = '0123456789';
+  const persian = '۰۱۲۳۴۵۶۷۸۹';
+
+  for (int i = 0; i < english.length; i++) {
+    text = text.replaceAll(english[i], persian[i]);
+  }
+
+  return text;
+}
+
+String gregorianToJalali(DateTime date) {
+  int gy = date.year;
+  int gm = date.month;
+  int gd = date.day;
+
+  int jy;
+  int jm;
+  int jd;
+
+  final gDayNo = _gregorianDayNumber(gy, gm, gd);
+
+  final jDayNo = gDayNo - _gregorianDayNumber(1600, 3, 21);
+
+  int jNp = jDayNo ~/ 12053;
+  int jDay = jDayNo % 12053;
+
+  jy = 979 + 33 * jNp + 4 * (jDay ~/ 1461);
+  jDay %= 1461;
+
+  if (jDay >= 366) {
+    jy += (jDay - 1) ~/ 365;
+    jDay = (jDay - 1) % 365;
+  }
+
+  if (jDay < 186) {
+    jm = 1 + jDay ~/ 31;
+    jd = 1 + jDay % 31;
+  } else {
+    jm = 7 + (jDay - 186) ~/ 30;
+    jd = 1 + (jDay - 186) % 30;
+  }
+
+  return toPersianDigits(
+    '$jy/${jm.toString().padLeft(2, '0')}/${jd.toString().padLeft(2, '0')}',
+  );
+}
+
+int _gregorianDayNumber(int gy, int gm, int gd) {
+  final gy2 = gy + ((gm > 2) ? 1 : 0);
+
+  return (365 * gy) +
+      ((gy2 + 3) ~/ 4) -
+      ((gy2 + 99) ~/ 100) +
+      ((gy2 + 399) ~/ 400) +
+      gd +
+      _gregorianMonthDays(gm, gy);
+}
+
+int _gregorianMonthDays(int gm, int gy) {
+  const mdays = [
+    0,
+    0,
+    31,
+    59,
+    90,
+    120,
+    151,
+    181,
+    212,
+    243,
+    273,
+    304,
+    334,
+  ];
+
+  int result = mdays[gm];
+
+  if (gm > 2 && _isGregorianLeap(gy)) {
+    result++;
+  }
+
+  return result;
+}
+
+bool _isGregorianLeap(int year) {
+  return year % 4 == 0 &&
+      (year % 100 != 0 || year % 400 == 0);
+}
+
+// =====================================================
+// مدل بازرسی
 // =====================================================
 
 class Inspection {
@@ -43,10 +137,7 @@ class Inspection {
   final String agentCode;
   final String agentName;
   final String city;
-  final int inspectionCount;
-  final int problemCount;
   final String problems;
-  final String notes;
 
   Inspection({
     required this.id,
@@ -54,10 +145,7 @@ class Inspection {
     required this.agentCode,
     required this.agentName,
     required this.city,
-    required this.inspectionCount,
-    required this.problemCount,
     required this.problems,
-    required this.notes,
   });
 
   Map<String, dynamic> toJson() {
@@ -67,10 +155,7 @@ class Inspection {
       'agentCode': agentCode,
       'agentName': agentName,
       'city': city,
-      'inspectionCount': inspectionCount,
-      'problemCount': problemCount,
       'problems': problems,
-      'notes': notes,
     };
   }
 
@@ -81,22 +166,13 @@ class Inspection {
       agentCode: json['agentCode']?.toString() ?? '',
       agentName: json['agentName']?.toString() ?? '',
       city: json['city']?.toString() ?? '',
-      inspectionCount: int.tryParse(
-            json['inspectionCount']?.toString() ?? '0',
-          ) ??
-          0,
-      problemCount: int.tryParse(
-            json['problemCount']?.toString() ?? '0',
-          ) ??
-          0,
       problems: json['problems']?.toString() ?? '',
-      notes: json['notes']?.toString() ?? '',
     );
   }
 }
 
 // =====================================================
-// STORAGE
+// ذخیره اطلاعات
 // =====================================================
 
 class AppStorage {
@@ -152,7 +228,7 @@ class AppStorage {
 }
 
 // =====================================================
-// LOGIN
+// ورود
 // =====================================================
 
 class LoginPage extends StatefulWidget {
@@ -163,8 +239,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController passwordController =
-      TextEditingController();
+  final passwordController = TextEditingController();
 
   void login() {
     if (passwordController.text == '1234') {
@@ -200,7 +275,6 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 20),
               const Text(
                 'سامانه مدیریت بازرسی',
-                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Color(0xFFC9A227),
                   fontSize: 25,
@@ -239,7 +313,7 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // =====================================================
-// DASHBOARD
+// داشبورد
 // =====================================================
 
 class DashboardPage extends StatelessWidget {
@@ -368,7 +442,7 @@ class DashboardButton extends StatelessWidget {
 }
 
 // =====================================================
-// NEW INSPECTION
+// ثبت بازرسی جدید
 // =====================================================
 
 class NewInspectionPage extends StatefulWidget {
@@ -385,12 +459,7 @@ class _NewInspectionPageState
   final agentCodeController = TextEditingController();
   final agentNameController = TextEditingController();
   final cityController = TextEditingController();
-  final inspectionCountController =
-      TextEditingController(text: '1');
-  final problemCountController =
-      TextEditingController(text: '0');
   final problemsController = TextEditingController();
-  final notesController = TextEditingController();
 
   bool saving = false;
 
@@ -398,10 +467,8 @@ class _NewInspectionPageState
   void initState() {
     super.initState();
 
-    final now = DateTime.now();
-
     dateController.text =
-        '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}';
+        gregorianToJalali(DateTime.now());
   }
 
   Future<void> save() async {
@@ -419,17 +486,14 @@ class _NewInspectionPageState
     });
 
     final inspection = Inspection(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: DateTime.now()
+          .millisecondsSinceEpoch
+          .toString(),
       date: dateController.text.trim(),
       agentCode: agentCodeController.text.trim(),
       agentName: agentNameController.text.trim(),
       city: cityController.text.trim(),
-      inspectionCount:
-          int.tryParse(inspectionCountController.text) ?? 1,
-      problemCount:
-          int.tryParse(problemCountController.text) ?? 0,
       problems: problemsController.text.trim(),
-      notes: notesController.text.trim(),
     );
 
     await AppStorage.addInspection(inspection);
@@ -455,11 +519,7 @@ class _NewInspectionPageState
     agentCodeController.dispose();
     agentNameController.dispose();
     cityController.dispose();
-    inspectionCountController.dispose();
-    problemCountController.dispose();
     problemsController.dispose();
-    notesController.dispose();
-
     super.dispose();
   }
 
@@ -475,7 +535,7 @@ class _NewInspectionPageState
           children: [
             AppTextField(
               controller: dateController,
-              label: 'تاریخ',
+              label: 'تاریخ شمسی',
               icon: Icons.calendar_month,
             ),
             AppTextField(
@@ -495,28 +555,10 @@ class _NewInspectionPageState
               icon: Icons.location_city,
             ),
             AppTextField(
-              controller: inspectionCountController,
-              label: 'تعداد بازرسی',
-              icon: Icons.assignment,
-              keyboardType: TextInputType.number,
-            ),
-            AppTextField(
-              controller: problemCountController,
-              label: 'تعداد مشکلات',
-              icon: Icons.warning,
-              keyboardType: TextInputType.number,
-            ),
-            AppTextField(
               controller: problemsController,
               label: 'شرح مشکلات',
-              icon: Icons.description,
-              maxLines: 4,
-            ),
-            AppTextField(
-              controller: notesController,
-              label: 'توضیحات',
-              icon: Icons.notes,
-              maxLines: 3,
+              icon: Icons.warning,
+              maxLines: 5,
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -534,7 +576,9 @@ class _NewInspectionPageState
                       )
                     : const Icon(Icons.save),
                 label: Text(
-                  saving ? 'در حال ذخیره...' : 'ثبت بازرسی',
+                  saving
+                      ? 'در حال ذخیره...'
+                      : 'ثبت بازرسی',
                 ),
               ),
             ),
@@ -546,7 +590,7 @@ class _NewInspectionPageState
 }
 
 // =====================================================
-// TEXT FIELD
+// فیلد
 // =====================================================
 
 class AppTextField extends StatelessWidget {
@@ -584,21 +628,20 @@ class AppTextField extends StatelessWidget {
 }
 
 // =====================================================
-// ARCHIVE
+// بایگانی - ابتدا تاریخ‌ها
 // =====================================================
 
 class ArchivePage extends StatefulWidget {
   const ArchivePage({super.key});
 
   @override
-  State<ArchivePage> createState() => _ArchivePageState();
+  State<ArchivePage> createState() =>
+      _ArchivePageState();
 }
 
 class _ArchivePageState extends State<ArchivePage> {
   List<Inspection> inspections = [];
   bool loading = true;
-
-  final searchController = TextEditingController();
 
   @override
   void initState() {
@@ -617,23 +660,16 @@ class _ArchivePageState extends State<ArchivePage> {
     });
   }
 
-  List<Inspection> get filtered {
-    final search = searchController.text.trim();
+  List<String> get dates {
+    final result = inspections
+        .map((item) => item.date)
+        .where((date) => date.isNotEmpty)
+        .toSet()
+        .toList();
 
-    if (search.isEmpty) {
-      return inspections;
-    }
+    result.sort((a, b) => b.compareTo(a));
 
-    return inspections.where((item) {
-      return item.agentCode.contains(search) ||
-          item.agentName.contains(search);
-    }).toList();
-  }
-
-  @override
-  void dispose() {
-    searchController.dispose();
-    super.dispose();
+    return result;
   }
 
   @override
@@ -646,107 +682,221 @@ class _ArchivePageState extends State<ArchivePage> {
           ? const Center(
               child: CircularProgressIndicator(),
             )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'جستجو با کد یا نام عامل',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
+          : dates.isEmpty
+              ? const Center(
+                  child: Text(
+                    'هنوز هیچ بازرسی ثبت نشده است',
+                    style: TextStyle(fontSize: 18),
                   ),
-                ),
-                Expanded(
-                  child: filtered.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'موردی پیدا نشد',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                          ),
-                          itemCount: filtered.length,
-                          itemBuilder: (context, index) {
-                            final item = filtered[index];
-
-                            return Card(
-                              child: ListTile(
-                                leading: const CircleAvatar(
-                                  backgroundColor:
-                                      Color(0xFFC9A227),
-                                  child: Icon(
-                                    Icons.assignment,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                                title: Text(
-                                  item.agentCode,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${item.agentName.isEmpty ? 'بدون نام' : item.agentName}\n'
-                                  '${item.city.isEmpty ? 'بدون شهر' : item.city} - ${item.date}',
-                                ),
-                                isThreeLine: true,
-                                trailing: const Icon(
-                                  Icons.chevron_right,
-                                ),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          InspectionDetailsPage(
-                                        inspection: item,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                Padding(
+                )
+              : ListView.builder(
                   padding: const EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                RepeatedInspectionsPage(
-                              inspections: inspections,
-                            ),
+                  itemCount: dates.length,
+                  itemBuilder: (context, index) {
+                    final date = dates[index];
+
+                    final count = inspections
+                        .where(
+                          (item) => item.date == date,
+                        )
+                        .length;
+
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.calendar_month,
+                          color: Color(0xFFC9A227),
+                        ),
+                        title: Text(
+                          date,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.repeat),
-                      label: const Text(
-                        'بازرسی‌های تکراری',
+                        ),
+                        subtitle: Text(
+                          '$count بازرسی',
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  DailyArchivePage(
+                                date: date,
+                                inspections: inspections,
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
-              ],
-            ),
     );
   }
 }
 
 // =====================================================
-// INSPECTION DETAILS
+// بازرسی‌های یک روز
+// =====================================================
+
+class DailyArchivePage extends StatefulWidget {
+  final String date;
+  final List<Inspection> inspections;
+
+  const DailyArchivePage({
+    super.key,
+    required this.date,
+    required this.inspections,
+  });
+
+  @override
+  State<DailyArchivePage> createState() =>
+      _DailyArchivePageState();
+}
+
+class _DailyArchivePageState
+    extends State<DailyArchivePage> {
+  final searchController = TextEditingController();
+
+  List<Inspection> get dailyInspections {
+    var result = widget.inspections
+        .where(
+          (item) => item.date == widget.date,
+        )
+        .toList();
+
+    final search = searchController.text.trim();
+
+    if (search.isNotEmpty) {
+      result = result.where((item) {
+        return item.agentCode.contains(search) ||
+            item.agentName.contains(search);
+      }).toList();
+    }
+
+    return result;
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = dailyInspections;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.date),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'جستجوی کد یا نام عامل',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: data.isEmpty
+                ? const Center(
+                    child: Text(
+                      'بازرسی‌ای برای این تاریخ پیدا نشد',
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                    ),
+                    itemCount: data.length,
+                    itemBuilder: (context, index) {
+                      final item = data[index];
+
+                      return Card(
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor:
+                                Color(0xFFC9A227),
+                            child: Icon(
+                              Icons.assignment,
+                              color: Colors.black,
+                            ),
+                          ),
+                          title: Text(
+                            item.agentCode,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${item.agentName.isEmpty ? 'بدون نام' : item.agentName}\n'
+                            '${item.city.isEmpty ? 'بدون شهر' : item.city}',
+                          ),
+                          isThreeLine: true,
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    InspectionDetailsPage(
+                                  inspection: item,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SearchArchivePage(
+                        inspections:
+                            widget.inspections,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.manage_search),
+                label: const Text(
+                  'جستجوی پیشرفته بایگانی',
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// جزئیات
 // =====================================================
 
 class InspectionDetailsPage extends StatelessWidget {
@@ -772,35 +922,25 @@ class InspectionDetailsPage extends StatelessWidget {
           ),
           InfoCard(
             title: 'نام عامل',
-            value: inspection.agentName,
+            value: inspection.agentName.isEmpty
+                ? 'ثبت نشده'
+                : inspection.agentName,
           ),
           InfoCard(
             title: 'شهر',
-            value: inspection.city,
+            value: inspection.city.isEmpty
+                ? 'ثبت نشده'
+                : inspection.city,
           ),
           InfoCard(
             title: 'تاریخ',
             value: inspection.date,
           ),
           InfoCard(
-            title: 'تعداد بازرسی',
-            value: inspection.inspectionCount.toString(),
-          ),
-          InfoCard(
-            title: 'تعداد مشکلات',
-            value: inspection.problemCount.toString(),
-          ),
-          InfoCard(
             title: 'شرح مشکلات',
             value: inspection.problems.isEmpty
                 ? 'ثبت نشده'
                 : inspection.problems,
-          ),
-          InfoCard(
-            title: 'توضیحات',
-            value: inspection.notes.isEmpty
-                ? 'ثبت نشده'
-                : inspection.notes,
           ),
         ],
       ),
@@ -824,7 +964,8 @@ class InfoCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Text(
               title,
@@ -843,10 +984,120 @@ class InfoCard extends StatelessWidget {
 }
 
 // =====================================================
-// REPEATED INSPECTIONS
+// جستجوی پیشرفته
 // =====================================================
 
-class RepeatedInspectionsPage extends StatelessWidget {
+class SearchArchivePage extends StatefulWidget {
+  final List<Inspection> inspections;
+
+  const SearchArchivePage({
+    super.key,
+    required this.inspections,
+  });
+
+  @override
+  State<SearchArchivePage> createState() =>
+      _SearchArchivePageState();
+}
+
+class _SearchArchivePageState
+    extends State<SearchArchivePage> {
+  final codeController = TextEditingController();
+
+  List<Inspection> get results {
+    final code = codeController.text.trim();
+
+    if (code.isEmpty) {
+      return [];
+    }
+
+    return widget.inspections
+        .where(
+          (item) => item.agentCode.contains(code),
+        )
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    codeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = results;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('جستجوی بایگانی'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: codeController,
+              onChanged: (_) => setState(() {}),
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'کد عامل',
+                prefixIcon: Icon(Icons.numbers),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: data.isEmpty
+                ? const Center(
+                    child: Text(
+                      'کدی پیدا نشد',
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: data.length,
+                    itemBuilder: (context, index) {
+                      final item = data[index];
+
+                      return Card(
+                        child: ListTile(
+                          title: Text(
+                            item.agentCode,
+                          ),
+                          subtitle: Text(
+                            '${item.date} - ${item.city}',
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right,
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    InspectionDetailsPage(
+                                  inspection: item,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// بازرسی‌های تکراری
+// =====================================================
+
+class RepeatedInspectionsPage
+    extends StatelessWidget {
   final List<Inspection> inspections;
 
   const RepeatedInspectionsPage({
@@ -858,10 +1109,12 @@ class RepeatedInspectionsPage extends StatelessWidget {
     final Map<String, List<Inspection>> groups = {};
 
     for (final item in inspections) {
-      if (item.agentCode.trim().isEmpty) continue;
+      final code = item.agentCode.trim();
 
-      groups.putIfAbsent(item.agentCode, () => []);
-      groups[item.agentCode]!.add(item);
+      if (code.isEmpty) continue;
+
+      groups.putIfAbsent(code, () => []);
+      groups[code]!.add(item);
     }
 
     groups.removeWhere(
@@ -883,7 +1136,6 @@ class RepeatedInspectionsPage extends StatelessWidget {
           ? const Center(
               child: Text(
                 'بازرسی تکراری ثبت نشده است',
-                style: TextStyle(fontSize: 18),
               ),
             )
           : Column(
@@ -899,8 +1151,10 @@ class RepeatedInspectionsPage extends StatelessWidget {
                             MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'تعداد کدهای تکراری',
-                            style: TextStyle(fontSize: 17),
+                            'تعداد موارد تکراری',
+                            style: TextStyle(
+                              fontSize: 17,
+                            ),
                           ),
                           Text(
                             groups.length.toString(),
@@ -919,7 +1173,9 @@ class RepeatedInspectionsPage extends StatelessWidget {
                   child: ListView.builder(
                     itemCount: groups.length,
                     itemBuilder: (context, index) {
-                      final code = groups.keys.elementAt(index);
+                      final code =
+                          groups.keys.elementAt(index);
+
                       final records = groups[code]!;
 
                       return Card(
@@ -959,7 +1215,8 @@ class RepeatedInspectionsPage extends StatelessWidget {
   }
 }
 
-class RepeatedDatesPage extends StatelessWidget {
+class RepeatedDatesPage
+    extends StatelessWidget {
   final String code;
   final List<Inspection> records;
 
@@ -1013,10 +1270,11 @@ class RepeatedDatesPage extends StatelessWidget {
 }
 
 // =====================================================
-// DAILY PERFORMANCE
+// عملکرد روزانه
 // =====================================================
 
-class DailyPerformancePage extends StatelessWidget {
+class DailyPerformancePage
+    extends StatelessWidget {
   const DailyPerformancePage({super.key});
 
   @override
@@ -1024,14 +1282,14 @@ class DailyPerformancePage extends StatelessWidget {
     return const SimplePage(
       title: 'ثبت عملکرد روزانه',
       message:
-          'بخش ثبت عملکرد روزانه در مرحله بعد تکمیل می‌شود.',
+          'این بخش در مرحله بعد تکمیل می‌شود.',
       icon: Icons.today,
     );
   }
 }
 
 // =====================================================
-// REPORTS
+// گزارش‌ها
 // =====================================================
 
 class ReportsPage extends StatelessWidget {
@@ -1049,7 +1307,7 @@ class ReportsPage extends StatelessWidget {
 }
 
 // =====================================================
-// SETTINGS
+// تنظیمات
 // =====================================================
 
 class SettingsPage extends StatelessWidget {
@@ -1060,14 +1318,14 @@ class SettingsPage extends StatelessWidget {
     return const SimplePage(
       title: 'تنظیمات',
       message:
-          'تنظیمات نام بازرس، رمز عبور و سایر موارد در مرحله بعد تکمیل می‌شود.',
+          'تنظیمات بازرس و رمز عبور در مرحله بعد تکمیل می‌شود.',
       icon: Icons.settings,
     );
   }
 }
 
 // =====================================================
-// SIMPLE PAGE
+// صفحه ساده
 // =====================================================
 
 class SimplePage extends StatelessWidget {
@@ -1092,7 +1350,8 @@ class SimplePage extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment:
+                MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
