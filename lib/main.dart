@@ -1928,13 +1928,11 @@ class _SearchArchivePageState
     );
   }
 }
-
 // =====================================================
-// بازرسی‌های تکراری
+// بازرسی‌های تکراری - ماهانه
 // =====================================================
 
-class RepeatedInspectionsPage
-    extends StatelessWidget {
+class RepeatedInspectionsPage extends StatefulWidget {
   final List<Inspection> inspections;
 
   const RepeatedInspectionsPage({
@@ -1942,29 +1940,102 @@ class RepeatedInspectionsPage
     required this.inspections,
   });
 
-  Map<String, List<Inspection>>
-      get repeated {
-    final Map<String,
-        List<Inspection>> groups =
-        {};
+  @override
+  State<RepeatedInspectionsPage> createState() =>
+      _RepeatedInspectionsPageState();
+}
 
-    for (final item in inspections) {
-      final code =
-          item.agentCode.trim();
+class _RepeatedInspectionsPageState
+    extends State<RepeatedInspectionsPage> {
+  String? selectedMonth;
 
-      if (code.isEmpty) continue;
+  // استخراج ماه از تاریخ شمسی
+  // مثال: ۱۴۰۵/۰۵/۲۰ -> ۱۴۰۵/۰۵
+  String getMonth(String date) {
+    final parts = date.split('/');
 
-      groups.putIfAbsent(
-        code,
-        () => [],
-      );
+    if (parts.length >= 2) {
+      return '${parts[0]}/${parts[1]}';
+    }
 
+    return date;
+  }
+
+  String persianMonthName(String month) {
+    final parts = month.split('/');
+
+    if (parts.length != 2) {
+      return month;
+    }
+
+    final m = int.tryParse(
+          parts[1].replaceAll(
+            RegExp(r'[۰-۹]'),
+            (match) {
+              const p = '۰۱۲۳۴۵۶۷۸۹';
+              return p.indexOf(match.group(0)!).toString();
+            },
+          ),
+        ) ??
+        0;
+
+    const names = [
+      '',
+      'فروردین',
+      'اردیبهشت',
+      'خرداد',
+      'تیر',
+      'مرداد',
+      'شهریور',
+      'مهر',
+      'آبان',
+      'آذر',
+      'دی',
+      'بهمن',
+      'اسفند',
+    ];
+
+    if (m >= 1 && m <= 12) {
+      return '${names[m]} ${parts[0]}';
+    }
+
+    return month;
+  }
+
+  List<String> get months {
+    final result = widget.inspections
+        .map((item) => getMonth(item.date))
+        .where((month) => month.isNotEmpty)
+        .toSet()
+        .toList();
+
+    result.sort((a, b) => b.compareTo(a));
+
+    return result;
+  }
+
+  Map<String, List<Inspection>> repeatedForMonth(
+    String month,
+  ) {
+    final Map<String, List<Inspection>> groups = {};
+
+    for (final item in widget.inspections) {
+      if (getMonth(item.date) != month) {
+        continue;
+      }
+
+      final code = item.agentCode.trim();
+
+      if (code.isEmpty) {
+        continue;
+      }
+
+      groups.putIfAbsent(code, () => []);
       groups[code]!.add(item);
     }
 
     groups.removeWhere(
-      (key, value) =>
-          value.length < 2,
+      (key, value) => value.length < 2,
     );
 
     return groups;
@@ -1972,65 +2043,132 @@ class RepeatedInspectionsPage
 
   @override
   Widget build(BuildContext context) {
-    final groups = repeated;
+    if (selectedMonth == null) {
+      return _buildMonthList(context);
+    }
 
+    final groups =
+        repeatedForMonth(selectedMonth!);
+
+    return _buildCodeList(
+      context,
+      groups,
+      selectedMonth!,
+    );
+  }
+
+  Widget _buildMonthList(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text(
+        title: const Text(
           'بازرسی‌های تکراری',
+        ),
+      ),
+      body: months.isEmpty
+          ? const Center(
+              child: Text(
+                'هیچ بازرسی تکراری ثبت نشده است',
+                style: TextStyle(fontSize: 17),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: months.length,
+              itemBuilder: (context, index) {
+                final month = months[index];
+                final groups =
+                    repeatedForMonth(month);
+
+                final totalRepeated =
+                    groups.length;
+
+                return Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor:
+                          Color(0xFFC9A227),
+                      child: Icon(
+                        Icons.repeat,
+                        color: Colors.black,
+                      ),
+                    ),
+                    title: Text(
+                      persianMonthName(month),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '$totalRepeated عامل تکراری',
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                    ),
+                    onTap: () {
+                      setState(() {
+                        selectedMonth = month;
+                      });
+                    },
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildCodeList(
+    BuildContext context,
+    Map<String, List<Inspection>> groups,
+    String month,
+  ) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'تکراری‌های ${persianMonthName(month)}',
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            setState(() {
+              selectedMonth = null;
+            });
+          },
         ),
       ),
       body: groups.isEmpty
           ? const Center(
               child: Text(
-                'بازرسی تکراری ثبت نشده است',
+                'در این ماه بازرسی تکراری وجود ندارد',
               ),
             )
           : Column(
               children: [
                 Padding(
-                  padding:
-                      const EdgeInsets.all(
-                    16,
-                  ),
+                  padding: const EdgeInsets.all(16),
                   child: Card(
-                    color:
-                        const Color(
-                      0xFF101B2E,
-                    ),
+                    color: const Color(0xFF101B2E),
                     child: Padding(
-                      padding:
-                          const EdgeInsets.all(
-                        18,
-                      ),
+                      padding: const EdgeInsets.all(18),
                       child: Row(
                         mainAxisAlignment:
-                            MainAxisAlignment
-                                .spaceBetween,
+                            MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'تعداد کدهای تکراری',
-                            style:
-                                TextStyle(
-                              fontSize:
-                                  17,
+                            'تعداد عوامل تکراری',
+                            style: TextStyle(
+                              fontSize: 17,
                             ),
                           ),
                           Text(
-                            groups.length
-                                .toString(),
-                            style:
-                                const TextStyle(
+                            groups.length.toString(),
+                            style: const TextStyle(
                               color:
-                                  Color(
-                                0xFFC9A227,
-                              ),
-                              fontSize:
-                                  26,
+                                  Color(0xFFC9A227),
+                              fontSize: 28,
                               fontWeight:
-                                  FontWeight
-                                      .bold,
+                                  FontWeight.bold,
                             ),
                           ),
                         ],
@@ -2038,41 +2176,45 @@ class RepeatedInspectionsPage
                     ),
                   ),
                 ),
+
                 Expanded(
-                  child:
-                      ListView.builder(
-                    itemCount:
-                        groups.length,
+                  child: ListView.builder(
+                    padding:
+                        const EdgeInsets.symmetric(
+                      horizontal: 12,
+                    ),
+                    itemCount: groups.length,
                     itemBuilder:
                         (context, index) {
                       final code =
-                          groups.keys
-                              .elementAt(
-                        index,
-                      );
+                          groups.keys.elementAt(index);
 
                       final records =
                           groups[code]!;
 
                       return Card(
                         child: ListTile(
+                          leading:
+                              const Icon(
+                            Icons.store,
+                            color:
+                                Color(0xFFC9A227),
+                          ),
                           title: Text(
                             code,
                             style:
                                 const TextStyle(
                               fontWeight:
-                                  FontWeight
-                                      .bold,
+                                  FontWeight.bold,
+                              fontSize: 17,
                             ),
                           ),
-                          subtitle:
-                              Text(
-                            '${records.length} بار بازرسی شده',
+                          subtitle: Text(
+                            '${records.length} بار در این ماه بازرسی شده',
                           ),
                           trailing:
                               const Icon(
-                            Icons
-                                .chevron_right,
+                            Icons.chevron_right,
                           ),
                           onTap: () {
                             Navigator.push(
@@ -2081,8 +2223,8 @@ class RepeatedInspectionsPage
                                 builder: (_) =>
                                     RepeatedDatesPage(
                                   code: code,
-                                  records:
-                                      records,
+                                  records: records,
+                                  month: month,
                                 ),
                               ),
                             );
@@ -2098,66 +2240,128 @@ class RepeatedInspectionsPage
   }
 }
 
-class RepeatedDatesPage
-    extends StatelessWidget {
+// =====================================================
+// تاریخ‌های بازرسی تکراری یک عامل
+// =====================================================
+
+class RepeatedDatesPage extends StatelessWidget {
   final String code;
   final List<Inspection> records;
+  final String month;
 
   const RepeatedDatesPage({
     super.key,
     required this.code,
     required this.records,
+    required this.month,
   });
 
   @override
   Widget build(BuildContext context) {
+    final sortedRecords = [...records];
+
+    sortedRecords.sort(
+      (a, b) => a.date.compareTo(b.date),
+    );
+
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text('کد عامل: $code'),
+        title: Text(
+          'کد عامل: $code',
+        ),
       ),
-      body: ListView.builder(
-        padding:
-            const EdgeInsets.all(12),
-        itemCount: records.length,
-        itemBuilder:
-            (context, index) {
-          final item =
-              records[index];
-
-          return Card(
-            child: ListTile(
-              leading:
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Card(
+            color: const Color(0xFF101B2E),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
                   const Icon(
-                Icons.calendar_month,
-                color:
-                    Color(0xFFC9A227),
-              ),
-              title: Text(item.date),
-              subtitle: Text(
-                item.agentName.isEmpty
-                    ? 'بدون نام عامل'
-                    : item.agentName,
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        InspectionDetailsPage(
-                      inspection: item,
+                    Icons.repeat,
+                    size: 50,
+                    color: Color(0xFFC9A227),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'بازرسی‌های تکراری',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFC9A227),
                     ),
                   ),
-                );
-              },
+                  const SizedBox(height: 8),
+                  Text(
+                    'ماه: $month',
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'تعداد بازرسی: ${records.length}',
+                  ),
+                ],
+              ),
             ),
-          );
-        },
+          ),
+
+          const SizedBox(height: 8),
+
+          ...List.generate(
+            sortedRecords.length,
+            (index) {
+              final item = sortedRecords[index];
+
+              return Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor:
+                        const Color(0xFFC9A227),
+                    child: Text(
+                      '${index + 1}',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    item.date,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                  subtitle: Text(
+                    item.agentName.isEmpty
+                        ? 'بدون نام عامل'
+                        : item.agentName,
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            InspectionDetailsPage(
+                          inspection: item,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 }
-
 // =====================================================
 // صفحات فعلاً آماده توسعه
 // =====================================================
