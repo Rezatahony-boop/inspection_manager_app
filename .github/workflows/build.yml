@@ -19,9 +19,10 @@ jobs:
         with:
           flutter-version: '3.24.5'
           channel: stable
+          cache: true
 
-      - name: Create Android project
-        run: flutter create --platforms=android --project-name inspection_manager_app .
+      - name: Flutter clean
+        run: flutter clean
 
       - name: Get dependencies
         run: flutter pub get
