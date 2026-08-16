@@ -2,36 +2,54 @@ name: Build APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
+          flutter-version: '3.29.3'
           channel: stable
           cache: true
 
-      - name: Flutter clean
-        run: flutter clean
+      - name: Create fresh Flutter project
+        run: |
+          mkdir /tmp/flutter_project
+          flutter create --project-name inspection_manager_app /tmp/flutter_project
+
+      - name: Copy application files
+        run: |
+          cp lib/main.dart /tmp/flutter_project/lib/main.dart
+          cp pubspec.yaml /tmp/flutter_project/pubspec.yaml
+
+      - name: Set Android compile SDK
+        working-directory: /tmp/flutter_project
+        run: |
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle.kts
 
       - name: Get dependencies
-        run: flutter pub get
+        working-directory: /tmp/flutter_project
+        run: |
+          flutter pub get
+
+      - name: Analyze project
+        working-directory: /tmp/flutter_project
+        run: |
+          flutter analyze
 
       - name: Build APK
-        run: flutter build apk --release
+        working-directory: /tmp/flutter_project
+        run: |
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: inspection_manager_apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: /tmp/flutter_project/build/app/outputs/flutter-apk/app-release.apk
