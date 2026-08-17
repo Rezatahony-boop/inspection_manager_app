@@ -689,7 +689,7 @@ class _NewInspectionPageState
   Future<void> pickFile() async {
     try {
       final result =
-          await FilePicker.pickFiles();
+          FilePicker.platform.pickFiles()
 
       if (result == null ||
           result.files.isEmpty) {
