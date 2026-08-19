@@ -1560,3 +1560,721 @@ class _ArchivePageState
     );
   }
 }
+// =====================================================
+// عملکرد روزانه
+// =====================================================
+
+class DailyPerformancePage extends StatefulWidget {
+  const DailyPerformancePage({super.key});
+
+  @override
+  State<DailyPerformancePage> createState() =>
+      _DailyPerformancePageState();
+}
+
+class _DailyPerformancePageState
+    extends State<DailyPerformancePage> {
+  final dateController = TextEditingController();
+  final totalController = TextEditingController();
+  final problemController = TextEditingController();
+  final cityController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    dateController.text = gregorianToJalali(DateTime.now());
+  }
+
+  @override
+  void dispose() {
+    dateController.dispose();
+    totalController.dispose();
+    problemController.dispose();
+    cityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    final total = int.tryParse(totalController.text.trim()) ?? 0;
+    final problems =
+        int.tryParse(problemController.text.trim()) ?? 0;
+
+    final prefs = await SharedPreferences.getInstance();
+
+    final data = {
+      'date': dateController.text.trim(),
+      'total': total,
+      'problems': problems,
+      'city': cityController.text.trim(),
+    };
+
+    final old = prefs.getStringList('daily_performance') ?? [];
+    old.insert(0, jsonEncode(data));
+    await prefs.setStringList('daily_performance', old);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('عملکرد روزانه با موفقیت ثبت شد'),
+      ),
+    );
+
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ثبت عملکرد روزانه'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            AppTextField(
+              controller: dateController,
+              label: 'تاریخ',
+              icon: Icons.calendar_month,
+            ),
+            AppTextField(
+              controller: totalController,
+              label: 'تعداد کل بازرسی',
+              icon: Icons.assignment,
+              keyboardType: TextInputType.number,
+            ),
+            AppTextField(
+              controller: problemController,
+              label: 'تعداد مشکلات',
+              icon: Icons.warning,
+              keyboardType: TextInputType.number,
+            ),
+            AppTextField(
+              controller: cityController,
+              label: 'شهر',
+              icon: Icons.location_city,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: save,
+                icon: const Icon(Icons.save),
+                label: const Text('ثبت عملکرد'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================
+// گزارش‌ها
+// =====================================================
+
+class ReportsPage extends StatefulWidget {
+  const ReportsPage({super.key});
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage> {
+  List<Inspection> inspections = [];
+  int dailyTotal = 0;
+  int dailyProblems = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<void> load() async {
+    final data = await AppStorage.getInspections();
+    final prefs = await SharedPreferences.getInstance();
+    final records = prefs.getStringList('daily_performance') ?? [];
+
+    int total = 0;
+    int problems = 0;
+
+    for (final item in records) {
+      try {
+        final map = jsonDecode(item);
+        total += (map['total'] as num?)?.toInt() ?? 0;
+        problems += (map['problems'] as num?)?.toInt() ?? 0;
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      inspections = data;
+      dailyTotal = total;
+      dailyProblems = problems;
+    });
+  }
+
+  Map<String, int> cityCounts() {
+    final result = <String, int>{};
+
+    for (final item in inspections) {
+      final city =
+          item.city.trim().isEmpty ? 'نامشخص' : item.city.trim();
+      result[city] = (result[city] ?? 0) + 1;
+    }
+
+    return result;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cities = cityCounts();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('گزارش‌ها'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _ReportCard(
+              title: 'تعداد کل بازرسی‌های ثبت‌شده',
+              value: inspections.length.toString(),
+              icon: Icons.assignment_turned_in,
+            ),
+            _ReportCard(
+              title: 'مجموع عملکرد روزانه',
+              value: dailyTotal.toString(),
+              icon: Icons.today,
+            ),
+            _ReportCard(
+              title: 'مجموع مشکلات ثبت‌شده',
+              value: dailyProblems.toString(),
+              icon: Icons.warning,
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'گزارش بر اساس شهر',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (cities.isEmpty)
+                      const Text('اطلاعاتی ثبت نشده است')
+                    else
+                      ...cities.entries.map(
+                        (entry) => ListTile(
+                          leading: const Icon(
+                            Icons.location_city,
+                            color: Color(0xFFC9A227),
+                          ),
+                          title: Text(entry.key),
+                          trailing: Text(
+                            '${entry.value} بازرسی',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+
+  const _ReportCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          size: 38,
+          color: const Color(0xFFC9A227),
+        ),
+        title: Text(title),
+        trailing: Text(
+          value,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFC9A227),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================
+// تنظیمات
+// =====================================================
+
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final nameController =
+      TextEditingController(text: 'رضا طاحونی');
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> saveName() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'inspector_name',
+      nameController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تنظیمات ذخیره شد'),
+      ),
+    );
+  }
+
+  Future<void> changePassword() async {
+    final controller = TextEditingController();
+
+    final password = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تغییر رمز ورود'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'رمز جدید',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(
+                context,
+                controller.text.trim(),
+              );
+            },
+            child: const Text('ذخیره'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (password == null || password.isEmpty) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_password', password);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('رمز جدید ذخیره شد'),
+      ),
+    );
+  }
+
+  Future<void> clearInspections() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف اطلاعات'),
+        content: const Text(
+          'آیا از حذف تمام بازرسی‌ها مطمئن هستید؟',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('انصراف'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await AppStorage.saveInspections([]);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('اطلاعات بازرسی‌ها حذف شد'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('تنظیمات'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'مشخصات بازرس',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(
+            controller: nameController,
+            label: 'نام بازرس',
+            icon: Icons.person,
+          ),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: saveName,
+              child: const Text('ذخیره نام'),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.lock),
+              title: const Text('تغییر رمز ورود'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: changePassword,
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.delete_forever,
+                color: Colors.redAccent,
+              ),
+              title: const Text('حذف تمام بازرسی‌ها'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: clearInspections,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Center(
+            child: Text(
+              'سامانه مدیریت بازرسی',
+              style: TextStyle(
+                color: Color(0xFFC9A227),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// بایگانی روزانه
+// =====================================================
+
+class DailyArchivePage extends StatelessWidget {
+  final String date;
+  final List<Inspection> inspections;
+
+  const DailyArchivePage({
+    super.key,
+    required this.date,
+    required this.inspections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final daily = inspections
+        .where((item) => item.date == date)
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('بازرسی‌های $date'),
+      ),
+      body: daily.isEmpty
+          ? const Center(
+              child: Text('بازرسی‌ای برای این تاریخ وجود ندارد'),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: daily.length,
+              itemBuilder: (context, index) {
+                final item = daily[index];
+
+                return Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.assignment),
+                    ),
+                    title: Text(
+                      item.agentCode.isEmpty
+                          ? 'بدون کد عامل'
+                          : item.agentCode,
+                    ),
+                    subtitle: Text(
+                      [
+                        if (item.agentName.isNotEmpty)
+                          'عامل: ${item.agentName}',
+                        if (item.city.isNotEmpty)
+                          'شهر: ${item.city}',
+                        if (item.problems.isNotEmpty)
+                          'مشکلات: ${item.problems}',
+                      ].join('\n'),
+                    ),
+                    isThreeLine: true,
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+// =====================================================
+// جستجوی بایگانی
+// =====================================================
+
+class SearchArchivePage extends StatefulWidget {
+  final List<Inspection> inspections;
+
+  const SearchArchivePage({
+    super.key,
+    required this.inspections,
+  });
+
+  @override
+  State<SearchArchivePage> createState() =>
+      _SearchArchivePageState();
+}
+
+class _SearchArchivePageState
+    extends State<SearchArchivePage> {
+  final searchController = TextEditingController();
+  List<Inspection> results = [];
+
+  @override
+  void initState() {
+    super.initState();
+    results = widget.inspections;
+  }
+
+  void search(String value) {
+    final query = value.trim().toLowerCase();
+
+    setState(() {
+      if (query.isEmpty) {
+        results = widget.inspections;
+      } else {
+        results = widget.inspections.where((item) {
+          return item.agentCode.toLowerCase().contains(query) ||
+              item.agentName.toLowerCase().contains(query) ||
+              item.city.toLowerCase().contains(query) ||
+              item.date.toLowerCase().contains(query) ||
+              item.problems.toLowerCase().contains(query);
+        }).toList();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('جستجوی بایگانی'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: searchController,
+              onChanged: search,
+              decoration: const InputDecoration(
+                labelText: 'کد عامل، نام، شهر یا تاریخ',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          Expanded(
+            child: results.isEmpty
+                ? const Center(
+                    child: Text('موردی پیدا نشد'),
+                  )
+                : ListView.builder(
+                    itemCount: results.length,
+                    itemBuilder: (context, index) {
+                      final item = results[index];
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
+                        child: ListTile(
+                          leading: const Icon(
+                            Icons.assignment,
+                            color: Color(0xFFC9A227),
+                          ),
+                          title: Text(
+                            item.agentCode.isEmpty
+                                ? 'بدون کد عامل'
+                                : item.agentCode,
+                          ),
+                          subtitle: Text(
+                            '${item.date}'
+                            '${item.city.isEmpty ? '' : ' | ${item.city}'}',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// بازرسی‌های تکراری
+// =====================================================
+
+class RepeatedInspectionsPage extends StatelessWidget {
+  final List<Inspection> inspections;
+
+  const RepeatedInspectionsPage({
+    super.key,
+    required this.inspections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String, List<Inspection>>{};
+
+    for (final item in inspections) {
+      final key = item.agentCode.trim();
+
+      if (key.isEmpty) continue;
+
+      groups.putIfAbsent(key, () => []).add(item);
+    }
+
+    final repeated = groups.entries
+        .where((entry) => entry.value.length > 1)
+        .toList();
+
+    repeated.sort(
+      (a, b) => b.value.length.compareTo(a.value.length),
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('بازرسی‌های تکراری'),
+      ),
+      body: repeated.isEmpty
+          ? const Center(
+              child: Text(
+                'بازرسی تکراری پیدا نشد',
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: repeated.length,
+              itemBuilder: (context, index) {
+                final entry = repeated[index];
+
+                return Card(
+                  child: ExpansionTile(
+                    leading: const Icon(
+                      Icons.repeat,
+                      color: Color(0xFFC9A227),
+                    ),
+                    title: Text(
+                      'کد عامل: ${entry.key}',
+                    ),
+                    subtitle: Text(
+                      '${entry.value.length} بار بازرسی',
+                    ),
+                    children: entry.value.map(
+                      (item) {
+                        return ListTile(
+                          title: Text(item.date),
+                          subtitle: Text(
+                            [
+                              if (item.agentName.isNotEmpty)
+                                item.agentName,
+                              if (item.city.isNotEmpty)
+                                item.city,
+                            ].join(' - '),
+                          ),
+                        );
+                      },
+                    ).toList(),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
