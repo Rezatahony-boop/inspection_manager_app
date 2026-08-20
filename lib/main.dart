@@ -1179,24 +1179,42 @@ class _NewInspectionPageState
                     icon = Icons
                         .insert_drive_file;
                   }
-
-                  return ListTile(
-                    contentPadding:
-                        EdgeInsets.zero,
-                    leading: Icon(
-                      icon,
-                      color:
-                          const Color(
-                        0xFFC9A227,
-                      ),
-                    ),
-                    title: Text(
-                      evidence.name,
-                      maxLines: 1,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                    ),
+return ListTile(
+  contentPadding: EdgeInsets.zero,
+  leading: Icon(
+    icon,
+    color: const Color(0xFFC9A227),
+  ),
+  title: Text(
+    evidence.name,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+  ),
+  trailing: const Icon(
+    Icons.open_in_new,
+    color: Color(0xFFC9A227),
+  ),
+  onTap: () {
+    if (evidence.type == 'image') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FullImagePage(
+            imagePath: evidence.path,
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'فعلاً باز کردن این نوع مستند در این بخش فعال نیست',
+          ),
+        ),
+      );
+    }
+  },
+);
                     trailing:
                         IconButton(
                       icon:
