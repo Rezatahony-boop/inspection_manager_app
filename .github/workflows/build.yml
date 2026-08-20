@@ -28,10 +28,12 @@ jobs:
           cp lib/main.dart /tmp/flutter_project/lib/main.dart
           cp pubspec.yaml /tmp/flutter_project/pubspec.yaml
 
-      - name: Set Android compile SDK
+      - name: Configure Android
         working-directory: /tmp/flutter_project
         run: |
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle.kts
+          sed -i '/compileSdk = 35/a\    ndkVersion = "27.0.12077973"' android/app/build.gradle.kts
+          sed -i '/minSdk = flutter.minSdkVersion/c\        minSdk = 23' android/app/build.gradle.kts
 
       - name: Remove default Flutter test
         run: |
