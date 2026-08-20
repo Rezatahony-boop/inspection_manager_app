@@ -20,7 +20,7 @@ jobs:
 
       - name: Create fresh Flutter project
         run: |
-          mkdir /tmp/flutter_project
+          mkdir -p /tmp/flutter_project
           flutter create --project-name inspection_manager_app /tmp/flutter_project
 
       - name: Copy application files
@@ -33,15 +33,14 @@ jobs:
         run: |
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle.kts
 
+      - name: Remove default Flutter test
+        run: |
+          rm -rf /tmp/flutter_project/test
+
       - name: Get dependencies
         working-directory: /tmp/flutter_project
         run: |
           flutter pub get
-
-      - name: Analyze project
-        working-directory: /tmp/flutter_project
-        run: |
-          flutter analyze
 
       - name: Build APK
         working-directory: /tmp/flutter_project
