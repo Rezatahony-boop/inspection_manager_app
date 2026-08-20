@@ -2411,7 +2411,44 @@ class DailyArchivePage
     );
   }
 }
+class FullImagePage extends StatelessWidget {
+  final String imagePath;
 
+  const FullImagePage({
+    super.key,
+    required this.imagePath,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('مشاهده تصویر'),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.file(
+            File(imagePath),
+            fit: BoxFit.contain,
+            errorBuilder: (
+              context,
+              error,
+              stackTrace,
+            ) {
+              return const Center(
+                child: Text(
+                  'تصویر قابل نمایش نیست',
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
 // =====================================================
 // جستجوی بایگانی
 // =====================================================
