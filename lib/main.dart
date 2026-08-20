@@ -2054,17 +2054,46 @@ class DailyArchivePage extends StatelessWidget {
               itemCount: daily.length,
               itemBuilder: (context, index) {
                 final item = daily[index];
-
-                return Card(
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.assignment),
-                    ),
-                    title: Text(
-                      item.agentCode.isEmpty
-                          ? 'بدون کد عامل'
-                          : item.agentCode,
-                    ),
+return Card(
+  child: ListTile(
+    leading: const CircleAvatar(
+      child: Icon(Icons.assignment),
+    ),
+    title: Text(
+      item.agentCode.isEmpty
+          ? 'بدون کد عامل'
+          : item.agentCode,
+      style: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 17,
+      ),
+    ),
+    subtitle: Text(
+      [
+        if (item.agentName.isNotEmpty)
+          'عامل: ${item.agentName}',
+        if (item.city.isNotEmpty)
+          'شهر: ${item.city}',
+        if (item.problems.isNotEmpty)
+          'مشکلات: ${item.problems}',
+      ].join('\n'),
+    ),
+    isThreeLine: true,
+    trailing: const Icon(
+      Icons.chevron_right,
+    ),
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => InspectionDetailsPage(
+            inspection: item,
+          ),
+        ),
+      );
+    },
+  ),
+);
                     subtitle: Text(
                       [
                         if (item.agentName.isNotEmpty)
