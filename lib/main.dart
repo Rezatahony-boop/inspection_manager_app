@@ -2307,3 +2307,162 @@ class RepeatedInspectionsPage extends StatelessWidget {
     );
   }
 }
+// =====================================================
+// جزئیات بازرسی
+// =====================================================
+
+class InspectionDetailsPage extends StatelessWidget {
+  final Inspection inspection;
+
+  const InspectionDetailsPage({
+    super.key,
+    required this.inspection,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('جزئیات بازرسی'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _infoCard(
+              icon: Icons.calendar_month,
+              title: 'تاریخ',
+              value: inspection.date,
+            ),
+            _infoCard(
+              icon: Icons.numbers,
+              title: 'کد عامل',
+              value: inspection.agentCode.isEmpty
+                  ? 'ثبت نشده'
+                  : inspection.agentCode,
+            ),
+            _infoCard(
+              icon: Icons.store,
+              title: 'نام عامل',
+              value: inspection.agentName.isEmpty
+                  ? 'ثبت نشده'
+                  : inspection.agentName,
+            ),
+            _infoCard(
+              icon: Icons.location_city,
+              title: 'شهر',
+              value: inspection.city.isEmpty
+                  ? 'ثبت نشده'
+                  : inspection.city,
+            ),
+            _infoCard(
+              icon: Icons.warning,
+              title: 'شرح مشکلات',
+              value: inspection.problems.isEmpty
+                  ? 'مشکلی ثبت نشده'
+                  : inspection.problems,
+            ),
+
+            const SizedBox(height: 8),
+
+            Card(
+              color: const Color(0xFF101B2E),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.attach_file,
+                          color: Color(0xFFC9A227),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'مستندات',
+                          style: TextStyle(
+                            color: Color(0xFFC9A227),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (inspection.evidences.isEmpty)
+                      const Text(
+                        'مستندی برای این بازرسی ثبت نشده است.',
+                      )
+                    else
+                      ...inspection.evidences.map(
+                        (evidence) {
+                          IconData icon;
+
+                          if (evidence.type == 'image') {
+                            icon = Icons.image;
+                          } else if (evidence.type == 'audio') {
+                            icon = Icons.audiotrack;
+                          } else {
+                            icon = Icons.insert_drive_file;
+                          }
+
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              icon,
+                              color: const Color(0xFFC9A227),
+                            ),
+                            title: Text(
+                              evidence.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Card(
+      color: const Color(0xFF101B2E),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: const Color(0xFFC9A227),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFFC9A227),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
