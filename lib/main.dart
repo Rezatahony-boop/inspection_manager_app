@@ -2189,17 +2189,16 @@ class _RepeatedInspectionsPageState
     if (parts.length != 2) {
       return month;
     }
-
-    final m = int.tryParse(
-          parts[1].replaceAll(
-            RegExp(r'[۰-۹]'),
-            (match) {
-              const p = '۰۱۲۳۴۵۶۷۸۹';
-              return p.indexOf(match.group(0)!).toString();
-            },
-          ),
-        ) ??
-        0;
+final m = int.tryParse(
+      parts[1].replaceAllMapped(
+        RegExp(r'[۰-۹]'),
+        (match) {
+          const p = '۰۱۲۳۴۵۶۷۸۹';
+          return p.indexOf(match.group(0)!).toString();
+        },
+      ),
+    ) ??
+    0;
 
     const names = [
       '',
