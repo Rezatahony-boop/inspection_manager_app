@@ -2603,19 +2603,650 @@ class DailyPerformancePage
     );
   }
 }
+class ReportsPage extends StatefulWidget {
+  const ReportsPage({super.key});
 
-class ReportsPage
-    extends StatelessWidget {
-  const ReportsPage({
-    super.key,
-  });
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage> {
+  List<Inspection> inspections = [];
+  bool loading = true;
+
+  String? selectedMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    loadInspections();
+  }
+
+  Future<void> loadInspections() async {
+    final data = await AppStorage.getInspections();
+
+    if (!mounted) return;
+
+    setState(() {
+      inspections = data;
+      loading = false;
+    });
+  }
+
+  // ---------------------------------------------------
+  // استخراج ماه از تاریخ شمسی
+  // ---------------------------------------------------
+
+  String getMonth(String date) {
+    final parts = date.split('/');
+
+    if (parts.length >= 2) {
+      return '${parts[0]}/${parts[1]}';
+    }
+
+    return date;
+  }
+
+  // ---------------------------------------------------
+  // تبدیل عدد فارسی به انگلیسی
+  // ---------------------------------------------------
+
+  String convertPersianDigits(String text) {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    const english = '0123456789';
+
+    for (int i = 0; i < 10; i++) {
+      text = text.replaceAll(persian[i], english[i]);
+      text = text.replaceAll(arabic[i], english[i]);
+    }
+
+    return text;
+  }
+
+  // ---------------------------------------------------
+  // نام ماه شمسی
+  // ---------------------------------------------------
+
+  String persianMonthName(String month) {
+    final parts = month.split('/');
+
+    if (parts.length != 2) {
+      return month;
+    }
+
+    final monthNumber = int.tryParse(
+          convertPersianDigits(parts[1]),
+        ) ??
+        0;
+
+    const names = [
+      '',
+      'فروردین',
+      'اردیبهشت',
+      'خرداد',
+      'تیر',
+      'مرداد',
+      'شهریور',
+      'مهر',
+      'آبان',
+      'آذر',
+      'دی',
+      'بهمن',
+      'اسفند',
+    ];
+
+    if (monthNumber >= 1 && monthNumber <= 12) {
+      return '${names[monthNumber]} ${parts[0]}';
+    }
+
+    return month;
+  }
+
+  // ---------------------------------------------------
+  // ماه‌های موجود
+  // ---------------------------------------------------
+
+  List<String> get months {
+    final result = inspections
+        .map((item) => getMonth(item.date))
+        .where((month) => month.isNotEmpty)
+        .toSet()
+        .toList();
+
+    result.sort((a, b) => b.compareTo(a));
+
+    return result;
+  }
+
+  // ---------------------------------------------------
+  // تشخیص مشکل
+  // هر توضیحات غیرخالی = 1 مشکل
+  // ---------------------------------------------------
+
+  bool hasProblem(Inspection inspection) {
+    return inspection.problems.trim().isNotEmpty;
+  }
+
+  // ---------------------------------------------------
+  // تعداد مشکلات
+  // ---------------------------------------------------
+
+  int countProblems(List<Inspection> records) {
+    return records.where(hasProblem).length;
+  }
+
+  // ---------------------------------------------------
+  // امروز
+  // ---------------------------------------------------
+
+  String get today {
+    return gregorianToJalali(DateTime.now());
+  }
+
+  List<Inspection> get todayInspections {
+    return inspections
+        .where((item) => item.date.trim() == today.trim())
+        .toList();
+  }
+
+  // ---------------------------------------------------
+  // تکراری‌های یک ماه
+  // ---------------------------------------------------
+
+  Map<String, List<Inspection>> repeatedForMonth(
+    String month,
+  ) {
+    final Map<String, List<Inspection>> groups = {};
+
+    for (final item in inspections) {
+      if (getMonth(item.date) != month) {
+        continue;
+      }
+
+      final code = item.agentCode.trim();
+
+      if (code.isEmpty) {
+        continue;
+      }
+
+      groups.putIfAbsent(code, () => []);
+      groups[code]!.add(item);
+    }
+
+    groups.removeWhere(
+      (key, value) => value.length < 2,
+    );
+
+    return groups;
+  }
+
+  // ---------------------------------------------------
+  // تعداد کل بازرسی‌های تکراری
+  // مثال:
+  // عامل A سه بار
+  // عامل B دو بار
+  // نتیجه = 5 بازرسی تکراری
+  // ---------------------------------------------------
+
+  int repeatedInspectionCount(String month) {
+    final groups = repeatedForMonth(month);
+
+    int total = 0;
+
+    for (final records in groups.values) {
+      total += records.length;
+    }
+
+    return total;
+  }
+
+  // ---------------------------------------------------
+  // آمار شهرها
+  // ---------------------------------------------------
+
+  Map<String, List<Inspection>> cityGroups(
+    List<Inspection> records,
+  ) {
+    final Map<String, List<Inspection>> groups = {};
+
+    for (final item in records) {
+      final city = item.city.trim();
+
+      if (city.isEmpty) {
+        continue;
+      }
+
+      groups.putIfAbsent(city, () => []);
+      groups[city]!.add(item);
+    }
+
+    return groups;
+  }
+
+  // ---------------------------------------------------
+  // کارت آماری
+  // ---------------------------------------------------
+
+  Widget statCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    VoidCallback? onTap,
+  }) {
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC9A227),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.black,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        color: Color(0xFFC9A227),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onTap != null)
+                const Icon(
+                  Icons.chevron_right,
+                  color: Colors.white70,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------
+  // گزارش امروز
+  // ---------------------------------------------------
+
+  Widget dailyReport() {
+    final records = todayInspections;
+
+    final total = records.length;
+    final problems = countProblems(records);
+    final withoutProblem = total - problems;
+
+    final percent = total == 0
+        ? 0.0
+        : (problems / total) * 100;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'گزارش امروز',
+          style: const TextStyle(
+            color: Color(0xFFC9A227),
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        statCard(
+          title: 'تعداد بازرسی انجام‌شده',
+          value: total.toString(),
+          icon: Icons.assignment_turned_in,
+        ),
+
+        statCard(
+          title: 'تعداد بازرسی دارای مشکل',
+          value: problems.toString(),
+          icon: Icons.warning_amber_rounded,
+        ),
+
+        statCard(
+          title: 'تعداد بدون مشکل',
+          value: withoutProblem.toString(),
+          icon: Icons.check_circle_outline,
+        ),
+
+        statCard(
+          title: 'درصد بازرسی دارای مشکل',
+          value: '${percent.toStringAsFixed(1)}٪',
+          icon: Icons.percent,
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------
+  // گزارش ماهانه
+  // ---------------------------------------------------
+
+  Widget monthlyReport() {
+    if (months.isEmpty) {
+      return const Card(
+        color: Color(0xFF101B2E),
+        child: Padding(
+          padding: EdgeInsets.all(18),
+          child: Text(
+            'هنوز هیچ بازرسی‌ای ثبت نشده است.',
+          ),
+        ),
+      );
+    }
+
+    final month = selectedMonth ?? months.first;
+
+    final records = inspections
+        .where((item) => getMonth(item.date) == month)
+        .toList();
+
+    final total = records.length;
+    final problems = countProblems(records);
+    final withoutProblem = total - problems;
+
+    final percent = total == 0
+        ? 0.0
+        : (problems / total) * 100;
+
+    final repeated =
+        repeatedInspectionCount(month);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+
+        Text(
+          'گزارش ماهانه',
+          style: const TextStyle(
+            color: Color(0xFFC9A227),
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // انتخاب ماه
+        Card(
+          color: const Color(0xFF101B2E),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: month,
+                isExpanded: true,
+                dropdownColor:
+                    const Color(0xFF101B2E),
+                items: months.map((item) {
+                  return DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(
+                      persianMonthName(item),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+
+                  setState(() {
+                    selectedMonth = value;
+                  });
+                },
+              ),
+            ),
+          ),
+        ),
+
+        statCard(
+          title: 'کل بازرسی‌های ماه',
+          value: total.toString(),
+          icon: Icons.assignment_turned_in,
+        ),
+
+        statCard(
+          title: 'کل مشکلات ماه',
+          value: problems.toString(),
+          icon: Icons.warning_amber_rounded,
+        ),
+
+        statCard(
+          title: 'بازرسی‌های بدون مشکل',
+          value: withoutProblem.toString(),
+          icon: Icons.check_circle_outline,
+        ),
+
+        statCard(
+          title: 'درصد مشکلات',
+          value: '${percent.toStringAsFixed(1)}٪',
+          icon: Icons.percent,
+        ),
+
+        statCard(
+          title: 'تعداد بازرسی‌های تکراری',
+          value: repeated.toString(),
+          icon: Icons.repeat,
+          onTap: repeated == 0
+              ? null
+              : () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RepeatedInspectionsPage(
+                        inspections: inspections,
+                      ),
+                    ),
+                  );
+                },
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------
+  // آمار شهرها
+  // ---------------------------------------------------
+
+  Widget cityReport() {
+    final groups = cityGroups(inspections);
+
+    if (groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final cities = groups.keys.toList();
+
+    cities.sort(
+      (a, b) =>
+          groups[b]!.length.compareTo(
+            groups[a]!.length,
+          ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+
+        const Text(
+          'آمار شهرها',
+          style: TextStyle(
+            color: Color(0xFFC9A227),
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        ...cities.map((city) {
+          final records = groups[city]!;
+          final total = records.length;
+          final problems = countProblems(records);
+
+          final percent = total == 0
+              ? 0.0
+              : (problems / total) * 100;
+
+          return Card(
+            color: const Color(0xFF101B2E),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_city,
+                        color: Color(0xFFC9A227),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          city,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Text(
+                    'تعداد بازرسی: $total',
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    'تعداد مشکلات: $problems',
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    'درصد مشکل: ${percent.toStringAsFixed(1)}٪',
+                    style: const TextStyle(
+                      color: Color(0xFFC9A227),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  LinearProgressIndicator(
+                    value:
+                        total == 0 ? 0 : problems / total,
+                    minHeight: 8,
+                    borderRadius:
+                        BorderRadius.circular(10),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const SimplePage(
-      title: 'گزارش‌ها',
-      message:
-          'گزارش‌های روزانه، ماهانه و مقایسه شهرها در مرحله بعد تکمیل می‌شود.',
+    if (loading) {
+      return const Scaffold(
+        appBar: AppBar(
+          title: Text('گزارش‌ها'),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('آمار و گزارش‌ها'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: loadInspections,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (inspections.isEmpty)
+              const Card(
+                color: Color(0xFF101B2E),
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.bar_chart,
+                        size: 70,
+                        color: Color(0xFFC9A227),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'هنوز اطلاعاتی برای نمایش آمار وجود ندارد.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 17,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              dailyReport(),
+              monthlyReport(),
+              cityReport(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
       icon: Icons.bar_chart,
     );
   }
