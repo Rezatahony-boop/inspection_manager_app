@@ -1,3 +1,4 @@
+```yaml
 name: inspection_manager_app
 description: سامانه مدیریت بازرسی
 publish_to: 'none'
@@ -10,7 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-open_filex: ^4.7.0
+
+  open_filex: ^4.7.0
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.2
   image_picker: ^1.1.2
@@ -26,3 +28,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+```
