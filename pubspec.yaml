@@ -10,7 +10,6 @@ sdk: ">=3.4.0 <4.0.0"
 dependencies:
 flutter:
 sdk: flutter
-
 open_filex: ^4.7.0
 cupertino_icons: ^1.0.8
 shared_preferences: ^2.3.2
