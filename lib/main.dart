@@ -2603,8 +2603,11 @@ class DailyPerformancePage
     );
   }
 }
+
 class ReportsPage extends StatefulWidget {
-  const ReportsPage({super.key});
+  const ReportsPage({
+    super.key,
+  });
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
@@ -2612,32 +2615,29 @@ class ReportsPage extends StatefulWidget {
 
 class _ReportsPageState extends State<ReportsPage> {
   List<Inspection> inspections = [];
-  bool loading = true;
-
+  bool isLoading = true;
+  String selectedDate = '';
   String? selectedMonth;
 
   @override
   void initState() {
     super.initState();
-    loadInspections();
+    selectedDate = gregorianToJalali(DateTime.now());
+    _loadInspections();
   }
 
-  Future<void> loadInspections() async {
+  Future<void> _loadInspections() async {
     final data = await AppStorage.getInspections();
 
     if (!mounted) return;
 
     setState(() {
       inspections = data;
-      loading = false;
+      isLoading = false;
     });
   }
 
-  // ---------------------------------------------------
-  // استخراج ماه از تاریخ شمسی
-  // ---------------------------------------------------
-
-  String getMonth(String date) {
+  String _getMonth(String date) {
     final parts = date.split('/');
 
     if (parts.length >= 2) {
@@ -2647,38 +2647,30 @@ class _ReportsPageState extends State<ReportsPage> {
     return date;
   }
 
-  // ---------------------------------------------------
-  // تبدیل عدد فارسی به انگلیسی
-  // ---------------------------------------------------
+  int _monthNumber(String month) {
+    final parts = month.split('/');
 
-  String convertPersianDigits(String text) {
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const arabic = '٠١٢٣٤٥٦٧٨٩';
-    const english = '0123456789';
-
-    for (int i = 0; i < 10; i++) {
-      text = text.replaceAll(persian[i], english[i]);
-      text = text.replaceAll(arabic[i], english[i]);
+    if (parts.length != 2) {
+      return 0;
     }
 
-    return text;
+    var value = parts[1];
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const english = '0123456789';
+
+    for (int i = 0; i < persian.length; i++) {
+      value = value.replaceAll(persian[i], english[i]);
+    }
+
+    return int.tryParse(value) ?? 0;
   }
 
-  // ---------------------------------------------------
-  // نام ماه شمسی
-  // ---------------------------------------------------
-
-  String persianMonthName(String month) {
+  String _persianMonthName(String month) {
     final parts = month.split('/');
 
     if (parts.length != 2) {
       return month;
     }
-
-    final monthNumber = int.tryParse(
-          convertPersianDigits(parts[1]),
-        ) ??
-        0;
 
     const names = [
       '',
@@ -2696,102 +2688,73 @@ class _ReportsPageState extends State<ReportsPage> {
       'اسفند',
     ];
 
-    if (monthNumber >= 1 && monthNumber <= 12) {
-      return '${names[monthNumber]} ${parts[0]}';
+    final number = _monthNumber(month);
+
+    if (number >= 1 && number <= 12) {
+      return '${names[number]} ${parts[0]}';
     }
 
     return month;
   }
 
-  // ---------------------------------------------------
-  // ماه‌های موجود
-  // ---------------------------------------------------
-
-  List<String> get months {
+  List<String> get _months {
     final result = inspections
-        .map((item) => getMonth(item.date))
+        .map((item) => _getMonth(item.date))
         .where((month) => month.isNotEmpty)
         .toSet()
         .toList();
 
     result.sort((a, b) => b.compareTo(a));
-
     return result;
   }
 
-  // ---------------------------------------------------
-  // تشخیص مشکل
-  // هر توضیحات غیرخالی = 1 مشکل
-  // ---------------------------------------------------
-
-  bool hasProblem(Inspection inspection) {
-    return inspection.problems.trim().isNotEmpty;
-  }
-
-  // ---------------------------------------------------
-  // تعداد مشکلات
-  // ---------------------------------------------------
-
-  int countProblems(List<Inspection> records) {
-    return records.where(hasProblem).length;
-  }
-
-  // ---------------------------------------------------
-  // امروز
-  // ---------------------------------------------------
-
-  String get today {
-    return gregorianToJalali(DateTime.now());
-  }
-
-  List<Inspection> get todayInspections {
+  List<Inspection> _recordsForDate(String date) {
     return inspections
-        .where((item) => item.date.trim() == today.trim())
+        .where((item) => item.date.trim() == date.trim())
         .toList();
   }
 
-  // ---------------------------------------------------
-  // تکراری‌های یک ماه
-  // ---------------------------------------------------
+  List<Inspection> _recordsForMonth(String month) {
+    return inspections
+        .where((item) => _getMonth(item.date) == month)
+        .toList();
+  }
 
-  Map<String, List<Inspection>> repeatedForMonth(
-    String month,
-  ) {
+  bool _hasProblem(Inspection item) {
+    return item.problems.trim().isNotEmpty;
+  }
+
+  int _problemCount(List<Inspection> records) {
+    return records.where(_hasProblem).length;
+  }
+
+  double _problemPercent(List<Inspection> records) {
+    if (records.isEmpty) {
+      return 0;
+    }
+
+    return (_problemCount(records) / records.length) * 100;
+  }
+
+  Map<String, List<Inspection>> _repeatedGroups(String month) {
     final Map<String, List<Inspection>> groups = {};
 
-    for (final item in inspections) {
-      if (getMonth(item.date) != month) {
-        continue;
-      }
-
+    for (final item in _recordsForMonth(month)) {
       final code = item.agentCode.trim();
 
       if (code.isEmpty) {
         continue;
       }
 
-      groups.putIfAbsent(code, () => []);
-      groups[code]!.add(item);
+      groups.putIfAbsent(code, () => []).add(item);
     }
 
-    groups.removeWhere(
-      (key, value) => value.length < 2,
-    );
-
+    groups.removeWhere((key, value) => value.length < 2);
     return groups;
   }
 
-  // ---------------------------------------------------
-  // تعداد کل بازرسی‌های تکراری
-  // مثال:
-  // عامل A سه بار
-  // عامل B دو بار
-  // نتیجه = 5 بازرسی تکراری
-  // ---------------------------------------------------
-
-  int repeatedInspectionCount(String month) {
-    final groups = repeatedForMonth(month);
-
+  int _repeatedInspectionCount(String month) {
+    final groups = _repeatedGroups(month);
     int total = 0;
 
     for (final records in groups.values) {
@@ -2801,11 +2764,7 @@ class _ReportsPageState extends State<ReportsPage> {
     return total;
   }
 
-  // ---------------------------------------------------
-  // آمار شهرها
-  // ---------------------------------------------------
-
-  Map<String, List<Inspection>> cityGroups(
+  Map<String, List<Inspection>> _cityGroups(
     List<Inspection> records,
   ) {
     final Map<String, List<Inspection>> groups = {};
@@ -2817,130 +2776,144 @@ class _ReportsPageState extends State<ReportsPage> {
         continue;
       }
 
-      groups.putIfAbsent(city, () => []);
-      groups[city]!.add(item);
+      groups.putIfAbsent(city, () => []).add(item);
     }
 
     return groups;
   }
 
-  // ---------------------------------------------------
-  // کارت آماری
-  // ---------------------------------------------------
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(
+        const Duration(days: 365),
+      ),
+      helpText: 'انتخاب تاریخ گزارش',
+      cancelText: 'انصراف',
+      confirmText: 'تأیید',
+    );
 
-  Widget statCard({
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      selectedDate = gregorianToJalali(picked);
+    });
+  }
+
+  Widget _statCard({
     required String title,
     required String value,
     required IconData icon,
     VoidCallback? onTap,
   }) {
-    return Card(
+    final card = Card(
       color: const Color(0xFF101B2E),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFC9A227),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icon,
-                  color: Colors.black,
-                  size: 28,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFFC9A227),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      value,
-                      style: const TextStyle(
-                        color: Color(0xFFC9A227),
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFFC9A227),
+                fontSize: 23,
+                fontWeight: FontWeight.bold,
               ),
-              if (onTap != null)
-                const Icon(
-                  Icons.chevron_right,
-                  color: Colors.white70,
-                ),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right),
             ],
-          ),
+          ],
         ),
       ),
     );
+
+    if (onTap == null) {
+      return card;
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: card,
+    );
   }
 
-  // ---------------------------------------------------
-  // گزارش امروز
-  // ---------------------------------------------------
-
-  Widget dailyReport() {
-    final records = todayInspections;
-
-    final total = records.length;
-    final problems = countProblems(records);
-    final withoutProblem = total - problems;
-
-    final percent = total == 0
-        ? 0.0
-        : (problems / total) * 100;
+  Widget _dailyReport() {
+    final records = _recordsForDate(selectedDate);
+    final problems = _problemCount(records);
+    final withoutProblems = records.length - problems;
+    final percent = _problemPercent(records);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'گزارش امروز',
-          style: const TextStyle(
+        const Text(
+          'گزارش روزانه',
+          style: TextStyle(
             color: Color(0xFFC9A227),
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 12),
-
-        statCard(
+        const SizedBox(height: 10),
+        Card(
+          color: const Color(0xFF101B2E),
+          child: ListTile(
+            leading: const Icon(
+              Icons.calendar_month,
+              color: Color(0xFFC9A227),
+            ),
+            title: const Text('تاریخ گزارش'),
+            subtitle: Text(selectedDate),
+            trailing: const Icon(Icons.edit_calendar),
+            onTap: _selectDate,
+          ),
+        ),
+        _statCard(
           title: 'تعداد بازرسی انجام‌شده',
-          value: total.toString(),
+          value: records.length.toString(),
           icon: Icons.assignment_turned_in,
         ),
-
-        statCard(
-          title: 'تعداد بازرسی دارای مشکل',
+        _statCard(
+          title: 'تعداد دارای مشکل',
           value: problems.toString(),
           icon: Icons.warning_amber_rounded,
         ),
-
-        statCard(
+        _statCard(
           title: 'تعداد بدون مشکل',
-          value: withoutProblem.toString(),
+          value: withoutProblems.toString(),
           icon: Icons.check_circle_outline,
         ),
-
-        statCard(
-          title: 'درصد بازرسی دارای مشکل',
+        _statCard(
+          title: 'درصد دارای مشکل',
           value: '${percent.toStringAsFixed(1)}٪',
           icon: Icons.percent,
         ),
@@ -2948,76 +2921,49 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  // ---------------------------------------------------
-  // گزارش ماهانه
-  // ---------------------------------------------------
+  Widget _monthlyReport() {
+    final months = _months;
 
-  Widget monthlyReport() {
     if (months.isEmpty) {
-      return const Card(
-        color: Color(0xFF101B2E),
-        child: Padding(
-          padding: EdgeInsets.all(18),
-          child: Text(
-            'هنوز هیچ بازرسی‌ای ثبت نشده است.',
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final month = selectedMonth ?? months.first;
-
-    final records = inspections
-        .where((item) => getMonth(item.date) == month)
-        .toList();
-
-    final total = records.length;
-    final problems = countProblems(records);
-    final withoutProblem = total - problems;
-
-    final percent = total == 0
-        ? 0.0
-        : (problems / total) * 100;
-
-    final repeated =
-        repeatedInspectionCount(month);
+    final records = _recordsForMonth(month);
+    final problems = _problemCount(records);
+    final withoutProblems = records.length - problems;
+    final percent = _problemPercent(records);
+    final repeated = _repeatedInspectionCount(month);
+    final repeatedGroups = _repeatedGroups(month);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-
-        Text(
+        const Text(
           'گزارش ماهانه',
-          style: const TextStyle(
+          style: TextStyle(
             color: Color(0xFFC9A227),
             fontSize: 21,
             fontWeight: FontWeight.bold,
           ),
         ),
-
-        const SizedBox(height: 12),
-
-        // انتخاب ماه
+        const SizedBox(height: 10),
         Card(
           color: const Color(0xFF101B2E),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 4,
+              horizontal: 14,
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: month,
                 isExpanded: true,
-                dropdownColor:
-                    const Color(0xFF101B2E),
+                dropdownColor: const Color(0xFF101B2E),
                 items: months.map((item) {
                   return DropdownMenuItem<String>(
                     value: item,
-                    child: Text(
-                      persianMonthName(item),
-                    ),
+                    child: Text(_persianMonthName(item)),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -3031,32 +2977,27 @@ class _ReportsPageState extends State<ReportsPage> {
             ),
           ),
         ),
-
-        statCard(
+        _statCard(
           title: 'کل بازرسی‌های ماه',
-          value: total.toString(),
+          value: records.length.toString(),
           icon: Icons.assignment_turned_in,
         ),
-
-        statCard(
+        _statCard(
           title: 'کل مشکلات ماه',
           value: problems.toString(),
           icon: Icons.warning_amber_rounded,
         ),
-
-        statCard(
+        _statCard(
           title: 'بازرسی‌های بدون مشکل',
-          value: withoutProblem.toString(),
+          value: withoutProblems.toString(),
           icon: Icons.check_circle_outline,
         ),
-
-        statCard(
+        _statCard(
           title: 'درصد مشکلات',
           value: '${percent.toStringAsFixed(1)}٪',
           icon: Icons.percent,
         ),
-
-        statCard(
+        _statCard(
           title: 'تعداد بازرسی‌های تکراری',
           value: repeated.toString(),
           icon: Icons.repeat,
@@ -3066,43 +3007,50 @@ class _ReportsPageState extends State<ReportsPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          RepeatedInspectionsPage(
+                      builder: (_) => RepeatedInspectionsPage(
                         inspections: inspections,
                       ),
                     ),
                   );
                 },
         ),
+        if (repeatedGroups.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Card(
+            color: const Color(0xFF101B2E),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                '${repeatedGroups.length} کد عامل در این ماه حداقل ۲ بار بازرسی شده‌اند.',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  // ---------------------------------------------------
-  // آمار شهرها
-  // ---------------------------------------------------
+  Widget _cityReport() {
+    final records = selectedMonth == null
+        ? inspections
+        : _recordsForMonth(selectedMonth!);
 
-  Widget cityReport() {
-    final groups = cityGroups(inspections);
+    final groups = _cityGroups(records);
 
     if (groups.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final cities = groups.keys.toList();
-
     cities.sort(
-      (a, b) =>
-          groups[b]!.length.compareTo(
-            groups[a]!.length,
-          ),
+      (a, b) => groups[b]!.length.compareTo(groups[a]!.length),
     );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-
         const Text(
           'آمار شهرها',
           style: TextStyle(
@@ -3111,25 +3059,18 @@ class _ReportsPageState extends State<ReportsPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 10),
         ...cities.map((city) {
-          final records = groups[city]!;
-          final total = records.length;
-          final problems = countProblems(records);
-
-          final percent = total == 0
-              ? 0.0
-              : (problems / total) * 100;
+          final cityRecords = groups[city]!;
+          final problems = _problemCount(cityRecords);
+          final percent = _problemPercent(cityRecords);
 
           return Card(
             color: const Color(0xFF101B2E),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -3142,44 +3083,24 @@ class _ReportsPageState extends State<ReportsPage> {
                         child: Text(
                           city,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 12),
-
-                  Text(
-                    'تعداد بازرسی: $total',
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    'تعداد مشکلات: $problems',
-                  ),
-
-                  const SizedBox(height: 5),
-
+                  const SizedBox(height: 10),
+                  Text('تعداد بازرسی: ${cityRecords.length}'),
+                  const SizedBox(height: 4),
+                  Text('تعداد مشکلات: $problems'),
+                  const SizedBox(height: 4),
                   Text(
                     'درصد مشکل: ${percent.toStringAsFixed(1)}٪',
                     style: const TextStyle(
                       color: Color(0xFFC9A227),
                       fontWeight: FontWeight.bold,
                     ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  LinearProgressIndicator(
-                    value:
-                        total == 0 ? 0 : problems / total,
-                    minHeight: 8,
-                    borderRadius:
-                        BorderRadius.circular(10),
                   ),
                 ],
               ),
@@ -3192,65 +3113,52 @@ class _ReportsPageState extends State<ReportsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
-      return const Scaffold(
-        appBar: AppBar(
-          title: Text('گزارش‌ها'),
-        ),
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('آمار و گزارش‌ها'),
       ),
-      body: RefreshIndicator(
-        onRefresh: loadInspections,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (inspections.isEmpty)
-              const Card(
-                color: Color(0xFF101B2E),
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.bar_chart,
-                        size: 70,
-                        color: Color(0xFFC9A227),
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'هنوز اطلاعاتی برای نمایش آمار وجود ندارد.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 17,
+      body: isLoading
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadInspections,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (inspections.isEmpty)
+                    const Card(
+                      color: Color(0xFF101B2E),
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.bar_chart,
+                              size: 64,
+                              color: Color(0xFFC9A227),
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              'هنوز هیچ بازرسی‌ای ثبت نشده است.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              )
-            else ...[
-              dailyReport(),
-              monthlyReport(),
-              cityReport(),
-            ],
-          ],
-        ),
-      ),
+                    )
+                  else ...[
+                    _dailyReport(),
+                    _monthlyReport(),
+                    _cityReport(),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }
-      icon: Icons.bar_chart,
-    );
-  }
-}
+
 
 class SettingsPage
     extends StatelessWidget {
