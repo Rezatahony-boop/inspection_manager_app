@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:docx_dart/docx_dart.dart' as docx;
+import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -52,6 +54,147 @@ String toPersianDigits(String text) {
   }
 
   return text;
+}
+
+
+String normalizeDigitsGlobal(String value) {
+  const persian = '۰۱۲۳۴۵۶۷۸۹';
+  const arabic = '٠١٢٣٤٥٦٧٨٩';
+  const english = '0123456789';
+
+  var result = value;
+  for (var i = 0; i < 10; i++) {
+    result = result.replaceAll(persian[i], english[i]);
+    result = result.replaceAll(arabic[i], english[i]);
+  }
+  return result;
+}
+
+String normalizeJalaliDate(String value) {
+  final parts = value.trim().split('/');
+  if (parts.length != 3) return value.trim();
+
+  final y = normalizeDigitsGlobal(parts[0]).padLeft(4, '0');
+  final m = normalizeDigitsGlobal(parts[1]).padLeft(2, '0');
+  final d = normalizeDigitsGlobal(parts[2]).padLeft(2, '0');
+  return '$y/$m/$d';
+}
+
+int jalaliDateKey(String value) {
+  final normalized = normalizeJalaliDate(value);
+  final parts = normalized.split('/');
+  if (parts.length != 3) return 0;
+
+  final y = int.tryParse(parts[0]) ?? 0;
+  final m = int.tryParse(parts[1]) ?? 0;
+  final d = int.tryParse(parts[2]) ?? 0;
+
+  return (y * 10000) + (m * 100) + d;
+}
+
+bool isValidJalaliDate(String value) {
+  final normalized = normalizeJalaliDate(value);
+  final parts = normalized.split('/');
+  if (parts.length != 3) return false;
+
+  final y = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  final d = int.tryParse(parts[2]);
+
+  if (y == null || m == null || d == null) return false;
+  return y >= 1300 && y <= 1500 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+}
+
+Future<String?> showJalaliDateDialog(
+  BuildContext context, {
+  required String initialDate,
+  String title = 'انتخاب تاریخ شمسی',
+}) async {
+  final controller = TextEditingController(
+    text: normalizeJalaliDate(initialDate),
+  );
+
+  final result = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.datetime,
+          textAlign: TextAlign.center,
+          decoration: const InputDecoration(
+            labelText: 'تاریخ شمسی',
+            hintText: '۱۴۰۵/۰۵/۲۳',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.calendar_month),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('انصراف'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (!isValidJalaliDate(value)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تاریخ را به شکل ۱۴۰۵/۰۵/۲۳ وارد کنید.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(
+                dialogContext,
+                normalizeJalaliDate(value),
+              );
+            },
+            child: const Text('تأیید'),
+          ),
+        ],
+      );
+    },
+  );
+
+  controller.dispose();
+  return result;
+}
+
+String formatJalaliDate(String value) {
+  final normalized = normalizeJalaliDate(value);
+  final parts = normalized.split('/');
+  if (parts.length != 3) return toPersianDigits(value);
+  return toPersianDigits(normalized);
+}
+
+String jalaliMonthTitle(String month) {
+  final parts = normalizeDigitsGlobal(month).split('/');
+  if (parts.length != 2) return toPersianDigits(month);
+
+  final monthNumber = int.tryParse(parts[1]) ?? 0;
+  const names = [
+    '',
+    'فروردین',
+    'اردیبهشت',
+    'خرداد',
+    'تیر',
+    'مرداد',
+    'شهریور',
+    'مهر',
+    'آبان',
+    'آذر',
+    'دی',
+    'بهمن',
+    'اسفند',
+  ];
+
+  if (monthNumber < 1 || monthNumber > 12) {
+    return toPersianDigits(month);
+  }
+
+  return '${names[monthNumber]} ${toPersianDigits(parts[0])}';
 }
 
 String gregorianToJalali(DateTime date) {
@@ -310,6 +453,12 @@ class AppStorage {
       inspections[index] = updated;
       await saveInspections(inspections);
     }
+  }
+
+  static Future<void> deleteInspection(String id) async {
+    final inspections = await getInspections();
+    inspections.removeWhere((item) => item.id == id);
+    await saveInspections(inspections);
   }
 }
 
@@ -1662,8 +1811,8 @@ class _DailyArchivePageState
 // جزئیات بازرسی
 // =====================================================
 
-class InspectionDetailsPage
-    extends StatelessWidget {
+
+class InspectionDetailsPage extends StatefulWidget {
   final Inspection inspection;
 
   const InspectionDetailsPage({
@@ -1672,55 +1821,335 @@ class InspectionDetailsPage
   });
 
   @override
+  State<InspectionDetailsPage> createState() =>
+      _InspectionDetailsPageState();
+}
+
+class _InspectionDetailsPageState
+    extends State<InspectionDetailsPage> {
+  late Inspection currentInspection;
+
+  @override
+  void initState() {
+    super.initState();
+    currentInspection = widget.inspection;
+  }
+
+  Future<void> _edit() async {
+    final updated = await Navigator.push<Inspection>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditInspectionPage(
+          inspection: currentInspection,
+        ),
+      ),
+    );
+
+    if (updated == null || !mounted) return;
+
+    setState(() {
+      currentInspection = updated;
+    });
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('حذف بازرسی'),
+          content: const Text(
+            'آیا از حذف این بازرسی مطمئن هستید؟ این عملیات قابل بازگشت نیست.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('انصراف'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('حذف'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    await AppStorage.deleteInspection(currentInspection.id);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('بازرسی با موفقیت حذف شد')),
+    );
+
+    Navigator.pop(context, true);
+  }
+
+  Widget _actionButton({
+    required String title,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool danger = false,
+  }) {
+    return Expanded(
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: danger ? Colors.redAccent : const Color(0xFFC9A227),
+        ),
+        label: Text(title),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final inspection = currentInspection;
+
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text('جزئیات بازرسی'),
+        title: const Text('جزئیات بازرسی'),
       ),
       body: ListView(
-        padding:
-            const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
           InfoCard(
             title: 'کد عامل',
-            value:
-                inspection.agentCode,
+            value: inspection.agentCode,
           ),
           InfoCard(
             title: 'نام عامل',
-            value: inspection
-                    .agentName.isEmpty
+            value: inspection.agentName.isEmpty
                 ? 'ثبت نشده'
                 : inspection.agentName,
           ),
           InfoCard(
             title: 'شهر',
-            value:
-                inspection.city.isEmpty
-                    ? 'ثبت نشده'
-                    : inspection.city,
+            value: inspection.city.isEmpty
+                ? 'ثبت نشده'
+                : inspection.city,
           ),
           InfoCard(
             title: 'تاریخ',
-            value:
-                inspection.date,
+            value: formatJalaliDate(inspection.date),
           ),
           InfoCard(
             title: 'شرح مشکلات',
-            value:
-                inspection.problems.isEmpty
-                    ? 'ثبت نشده'
-                    : inspection.problems,
+            value: inspection.problems.isEmpty
+                ? 'ثبت نشده'
+                : inspection.problems,
           ),
-
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _actionButton(
+                title: 'ویرایش',
+                icon: Icons.edit,
+                onPressed: _edit,
+              ),
+              const SizedBox(width: 10),
+              _actionButton(
+                title: 'حذف',
+                icon: Icons.delete_outline,
+                onPressed: _delete,
+                danger: true,
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
-
           EvidenceViewer(
-            evidences:
-                inspection.evidences,
+            evidences: inspection.evidences,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// =====================================================
+// ویرایش بازرسی
+// =====================================================
+
+class EditInspectionPage extends StatefulWidget {
+  final Inspection inspection;
+
+  const EditInspectionPage({
+    super.key,
+    required this.inspection,
+  });
+
+  @override
+  State<EditInspectionPage> createState() =>
+      _EditInspectionPageState();
+}
+
+class _EditInspectionPageState
+    extends State<EditInspectionPage> {
+  late final TextEditingController dateController;
+  late final TextEditingController agentCodeController;
+  late final TextEditingController agentNameController;
+  late final TextEditingController cityController;
+  late final TextEditingController problemsController;
+
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final item = widget.inspection;
+
+    dateController = TextEditingController(text: item.date);
+    agentCodeController =
+        TextEditingController(text: item.agentCode);
+    agentNameController =
+        TextEditingController(text: item.agentName);
+    cityController =
+        TextEditingController(text: item.city);
+    problemsController =
+        TextEditingController(text: item.problems);
+  }
+
+  Future<void> _selectDate() async {
+    final selected = await showJalaliDateDialog(
+      context,
+      initialDate: dateController.text,
+      title: 'تغییر تاریخ بازرسی',
+    );
+
+    if (selected != null && mounted) {
+      setState(() {
+        dateController.text = selected;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (agentCodeController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('کد عامل را وارد کنید')),
+      );
+      return;
+    }
+
+    final date = normalizeJalaliDate(dateController.text);
+    if (!isValidJalaliDate(date)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تاریخ را به شکل ۱۴۰۵/۰۵/۲۳ وارد کنید.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      saving = true;
+    });
+
+    final updated = Inspection(
+      id: widget.inspection.id,
+      date: date,
+      agentCode: agentCodeController.text.trim(),
+      agentName: agentNameController.text.trim(),
+      city: cityController.text.trim(),
+      problems: problemsController.text.trim(),
+      evidences: List<EvidenceFile>.from(
+        widget.inspection.evidences,
+      ),
+    );
+
+    await AppStorage.updateInspection(updated);
+
+    if (!mounted) return;
+
+    setState(() {
+      saving = false;
+    });
+
+    Navigator.pop(context, updated);
+  }
+
+  @override
+  void dispose() {
+    dateController.dispose();
+    agentCodeController.dispose();
+    agentNameController.dispose();
+    cityController.dispose();
+    problemsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ویرایش بازرسی'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: _selectDate,
+              child: AbsorbPointer(
+                child: AppTextField(
+                  controller: dateController,
+                  label: 'تاریخ شمسی',
+                  icon: Icons.calendar_month,
+                ),
+              ),
+            ),
+            AppTextField(
+              controller: agentCodeController,
+              label: 'کد عامل *',
+              icon: Icons.numbers,
+              keyboardType: TextInputType.number,
+            ),
+            AppTextField(
+              controller: agentNameController,
+              label: 'نام عامل',
+              icon: Icons.store,
+            ),
+            AppTextField(
+              controller: cityController,
+              label: 'شهر',
+              icon: Icons.location_city,
+            ),
+            AppTextField(
+              controller: problemsController,
+              label: 'شرح مشکلات',
+              icon: Icons.warning,
+              maxLines: 5,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: saving ? null : _save,
+                icon: saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.save),
+                label: Text(
+                  saving ? 'در حال ذخیره...' : 'ذخیره تغییرات',
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2604,26 +3033,54 @@ class DailyPerformancePage
   }
 }
 
+
+// =====================================================
+// آمار و گزارش‌ها
+// =====================================================
+
 class ReportsPage extends StatefulWidget {
-  const ReportsPage({
-    super.key,
-  });
+  const ReportsPage({super.key});
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
-class _ReportsPageState extends State<ReportsPage> {
+class _ReportsPageState extends State<ReportsPage>
+    with SingleTickerProviderStateMixin {
   List<Inspection> inspections = [];
   bool isLoading = true;
+
+  int reportMode = 0; // 0 روزانه، 1 ماهانه، 2 بین دو تاریخ، 3 بر اساس شهر
   String selectedDate = '';
+  String startDate = '';
+  String endDate = '';
   String? selectedMonth;
+  final Set<String> selectedCities = {};
+
+  final TextEditingController agentSearchController =
+      TextEditingController();
+  String agentSearch = '';
+
+  late final TabController tabController;
+
+  static const Color gold = Color(0xFFC9A227);
+  static const Color panel = Color(0xFF101B2E);
 
   @override
   void initState() {
     super.initState();
+    tabController = TabController(length: 4, vsync: this);
     selectedDate = gregorianToJalali(DateTime.now());
+    startDate = selectedDate;
+    endDate = selectedDate;
     _loadInspections();
+  }
+
+  @override
+  void dispose() {
+    tabController.dispose();
+    agentSearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInspections() async {
@@ -2631,177 +3088,271 @@ class _ReportsPageState extends State<ReportsPage> {
 
     if (!mounted) return;
 
+    final cities = data
+        .map((e) => e.city.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+
     setState(() {
       inspections = data;
       isLoading = false;
+      selectedCities.removeWhere((city) => !cities.contains(city));
     });
   }
 
-  String _getMonth(String date) {
-    final parts = date.split('/');
+  bool _hasProblem(Inspection item) =>
+      item.problems.trim().isNotEmpty;
 
-    if (parts.length >= 2) {
-      return '${parts[0]}/${parts[1]}';
-    }
+  int _problemCount(List<Inspection> data) =>
+      data.where(_hasProblem).length;
 
-    return date;
+  double _problemPercent(List<Inspection> data) {
+    if (data.isEmpty) return 0;
+    return (_problemCount(data) / data.length) * 100;
   }
 
-  int _monthNumber(String month) {
-    final parts = month.split('/');
-
-    if (parts.length != 2) {
-      return 0;
-    }
-
-    var value = parts[1];
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const english = '0123456789';
-
-    for (int i = 0; i < persian.length; i++) {
-      value = value.replaceAll(persian[i], english[i]);
-    }
-
-    return int.tryParse(value) ?? 0;
+  String _monthOf(String date) {
+    final parts = normalizeJalaliDate(date).split('/');
+    if (parts.length != 3) return '';
+    return '${parts[0]}/${parts[1]}';
   }
 
-  String _persianMonthName(String month) {
-    final parts = month.split('/');
-
-    if (parts.length != 2) {
-      return month;
-    }
-
-    const names = [
-      '',
-      'فروردین',
-      'اردیبهشت',
-      'خرداد',
-      'تیر',
-      'مرداد',
-      'شهریور',
-      'مهر',
-      'آبان',
-      'آذر',
-      'دی',
-      'بهمن',
-      'اسفند',
-    ];
-
-    final number = _monthNumber(month);
-
-    if (number >= 1 && number <= 12) {
-      return '${names[number]} ${parts[0]}';
-    }
-
-    return month;
-  }
-
-  List<String> get _months {
+  List<String> _months() {
     final result = inspections
-        .map((item) => _getMonth(item.date))
-        .where((month) => month.isNotEmpty)
+        .map((e) => _monthOf(e.date))
+        .where((e) => e.isNotEmpty)
         .toSet()
         .toList();
 
-    result.sort((a, b) => b.compareTo(a));
+    result.sort(
+      (a, b) => jalaliDateKey('${b.split('/')[0]}/${b.split('/')[1]}/01')
+          .compareTo(
+        jalaliDateKey('${a.split('/')[0]}/${a.split('/')[1]}/01'),
+      ),
+    );
+
     return result;
   }
 
-  List<Inspection> _recordsForDate(String date) {
-    return inspections
-        .where((item) => item.date.trim() == date.trim())
+  List<String> _cities() {
+    final result = inspections
+        .map((e) => e.city.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
         .toList();
+    result.sort();
+    return result;
   }
 
-  List<Inspection> _recordsForMonth(String month) {
-    return inspections
-        .where((item) => _getMonth(item.date) == month)
-        .toList();
-  }
-
-  bool _hasProblem(Inspection item) {
-    return item.problems.trim().isNotEmpty;
-  }
-
-  int _problemCount(List<Inspection> records) {
-    return records.where(_hasProblem).length;
-  }
-
-  double _problemPercent(List<Inspection> records) {
-    if (records.isEmpty) {
-      return 0;
-    }
-
-    return (_problemCount(records) / records.length) * 100;
-  }
-
-  Map<String, List<Inspection>> _repeatedGroups(String month) {
-    final Map<String, List<Inspection>> groups = {};
-
-    for (final item in _recordsForMonth(month)) {
-      final code = item.agentCode.trim();
-
-      if (code.isEmpty) {
-        continue;
-      }
-
-      groups.putIfAbsent(code, () => []).add(item);
-    }
-
-    groups.removeWhere((key, value) => value.length < 2);
-    return groups;
-  }
-
-  int _repeatedInspectionCount(String month) {
-    final groups = _repeatedGroups(month);
-    int total = 0;
-
-    for (final records in groups.values) {
-      total += records.length;
-    }
-
-    return total;
-  }
-
-  Map<String, List<Inspection>> _cityGroups(
-    List<Inspection> records,
+  List<Inspection> _dateRangeRecords(
+    String from,
+    String to,
   ) {
-    final Map<String, List<Inspection>> groups = {};
+    final fromKey = jalaliDateKey(from);
+    final toKey = jalaliDateKey(to);
 
-    for (final item in records) {
+    if (fromKey == 0 || toKey == 0) return [];
+
+    final low = fromKey <= toKey ? fromKey : toKey;
+    final high = fromKey <= toKey ? toKey : fromKey;
+
+    return inspections.where((item) {
+      final key = jalaliDateKey(item.date);
+      return key >= low && key <= high;
+    }).toList();
+  }
+
+  List<Inspection> _recordsForReport() {
+    switch (reportMode) {
+      case 0:
+        return inspections
+            .where(
+              (e) =>
+                  normalizeJalaliDate(e.date) ==
+                  normalizeJalaliDate(selectedDate),
+            )
+            .toList();
+
+      case 1:
+        final month = selectedMonth ?? (_months().isNotEmpty ? _months().first : '');
+        if (month.isEmpty) return [];
+        return inspections
+            .where((e) => _monthOf(e.date) == month)
+            .toList();
+
+      case 2:
+        return _dateRangeRecords(startDate, endDate);
+
+      case 3:
+        if (selectedCities.isEmpty) return inspections;
+        return inspections
+            .where((e) => selectedCities.contains(e.city.trim()))
+            .toList();
+
+      default:
+        return inspections;
+    }
+  }
+
+  int _distinctDays(List<Inspection> data) =>
+      data.map((e) => normalizeJalaliDate(e.date)).toSet().length;
+
+  Map<String, List<Inspection>> _cityGroups(List<Inspection> data) {
+    final groups = <String, List<Inspection>>{};
+
+    for (final item in data) {
       final city = item.city.trim();
-
-      if (city.isEmpty) {
-        continue;
-      }
-
+      if (city.isEmpty) continue;
       groups.putIfAbsent(city, () => []).add(item);
     }
 
     return groups;
   }
 
-  Future<void> _selectDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(
-        const Duration(days: 365),
-      ),
-      helpText: 'انتخاب تاریخ گزارش',
-      cancelText: 'انصراف',
-      confirmText: 'تأیید',
-    );
+  Map<String, List<Inspection>> _agentGroups(List<Inspection> data) {
+    final groups = <String, List<Inspection>>{};
 
-    if (picked == null || !mounted) {
-      return;
+    for (final item in data) {
+      final code = item.agentCode.trim();
+      if (code.isEmpty) continue;
+      groups.putIfAbsent(code, () => []).add(item);
     }
 
+    return groups;
+  }
+
+  Future<void> _pickDate({
+    required bool start,
+  }) async {
+    final result = await showJalaliDateDialog(
+      context,
+      initialDate: start ? startDate : endDate,
+      title: start ? 'تاریخ شروع' : 'تاریخ پایان',
+    );
+
+    if (result == null || !mounted) return;
+
     setState(() {
-      selectedDate = gregorianToJalali(picked);
+      if (start) {
+        startDate = result;
+      } else {
+        endDate = result;
+      }
     });
+  }
+
+  Future<void> _pickDailyDate() async {
+    final result = await showJalaliDateDialog(
+      context,
+      initialDate: selectedDate,
+      title: 'تاریخ گزارش روزانه',
+    );
+
+    if (result == null || !mounted) return;
+
+    setState(() {
+      selectedDate = result;
+    });
+  }
+
+  Future<void> _showCitySelector({
+    bool forCharts = false,
+  }) async {
+    final cities = _cities();
+    final temp = <String>{
+      ...selectedCities,
+    };
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('انتخاب شهرها'),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 360,
+                child: cities.isEmpty
+                    ? const Center(
+                        child: Text('هنوز شهری ثبت نشده است'),
+                      )
+                    : ListView.builder(
+                        itemCount: cities.length,
+                        itemBuilder: (_, index) {
+                          final city = cities[index];
+                          return CheckboxListTile(
+                            value: temp.contains(city),
+                            title: Text(city),
+                            onChanged: (value) {
+                              setDialogState(() {
+                                if (value == true) {
+                                  temp.add(city);
+                                } else {
+                                  temp.remove(city);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    temp
+                      ..clear()
+                      ..addAll(cities);
+                    setDialogState(() {});
+                  },
+                  child: const Text('انتخاب همه'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    temp.clear();
+                    setDialogState(() {});
+                  },
+                  child: const Text('پاک کردن'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      selectedCities
+                        ..clear()
+                        ..addAll(temp);
+                    });
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('تأیید'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _topTabs() {
+    return Container(
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: TabBar(
+        controller: tabController,
+        isScrollable: true,
+        labelColor: gold,
+        unselectedLabelColor: Colors.white70,
+        indicatorColor: gold,
+        tabs: const [
+          Tab(text: 'آمار'),
+          Tab(text: 'گزارش‌ها'),
+          Tab(text: 'نمودارها'),
+          Tab(text: 'سوابق عامل'),
+        ],
+      ),
+    );
   }
 
   Widget _statCard({
@@ -2810,30 +3361,32 @@ class _ReportsPageState extends State<ReportsPage> {
     required IconData icon,
     VoidCallback? onTap,
   }) {
-    final card = Card(
-      color: const Color(0xFF101B2E),
+    final child = Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gold.withOpacity(.65)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(13),
         child: Row(
           children: [
             Container(
-              width: 48,
-              height: 48,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xFFC9A227),
-                borderRadius: BorderRadius.circular(12),
+                color: gold,
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                color: Colors.black,
-              ),
+              child: Icon(icon, color: Colors.black),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -2841,134 +3394,155 @@ class _ReportsPageState extends State<ReportsPage> {
             Text(
               value,
               style: const TextStyle(
-                color: Color(0xFFC9A227),
-                fontSize: 23,
+                color: gold,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (onTap != null) ...[
-              const SizedBox(width: 6),
+            if (onTap != null)
               const Icon(Icons.chevron_right),
-            ],
           ],
         ),
       ),
     );
 
-    if (onTap == null) {
-      return card;
-    }
+    if (onTap == null) return child;
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
-      child: card,
+      child: child,
     );
   }
 
-  Widget _dailyReport() {
-    final records = _recordsForDate(selectedDate);
-    final problems = _problemCount(records);
-    final withoutProblems = records.length - problems;
-    final percent = _problemPercent(records);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'گزارش روزانه',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
+  Widget _dateField({
+    required String title,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: gold.withOpacity(.65)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_month,
+                    color: gold,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      formatJalaliDate(value),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFF101B2E),
-          child: ListTile(
-            leading: const Icon(
-              Icons.calendar_month,
-              color: Color(0xFFC9A227),
+      ),
+    );
+  }
+
+  Widget _modeSelector() {
+    const modes = [
+      'روزانه',
+      'ماهانه',
+      'بین دو تاریخ',
+      'بر اساس شهر',
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(
+          modes.length,
+          (index) => Padding(
+            padding: const EdgeInsets.only(left: 7),
+            child: ChoiceChip(
+              selected: reportMode == index,
+              label: Text(modes[index]),
+              selectedColor: gold,
+              labelStyle: TextStyle(
+                color: reportMode == index
+                    ? Colors.black
+                    : Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+              onSelected: (_) {
+                setState(() {
+                  reportMode = index;
+                });
+              },
             ),
-            title: const Text('تاریخ گزارش'),
-            subtitle: Text(selectedDate),
-            trailing: const Icon(Icons.edit_calendar),
-            onTap: _selectDate,
           ),
         ),
-        _statCard(
-          title: 'تعداد بازرسی انجام‌شده',
-          value: records.length.toString(),
-          icon: Icons.assignment_turned_in,
-        ),
-        _statCard(
-          title: 'تعداد دارای مشکل',
-          value: problems.toString(),
-          icon: Icons.warning_amber_rounded,
-        ),
-        _statCard(
-          title: 'تعداد بدون مشکل',
-          value: withoutProblems.toString(),
-          icon: Icons.check_circle_outline,
-        ),
-        _statCard(
-          title: 'درصد دارای مشکل',
-          value: '${percent.toStringAsFixed(1)}٪',
-          icon: Icons.percent,
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _monthlyReport() {
-    final months = _months;
+  Widget _reportsTab() {
+    final data = _recordsForReport();
+    final problems = _problemCount(data);
+    final days = _distinctDays(data);
+    final percent = _problemPercent(data);
 
-    if (months.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final month = selectedMonth ?? months.first;
-    final records = _recordsForMonth(month);
-    final problems = _problemCount(records);
-    final withoutProblems = records.length - problems;
-    final percent = _problemPercent(records);
-    final repeated = _repeatedInspectionCount(month);
-    final repeatedGroups = _repeatedGroups(month);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.all(14),
       children: [
-        const SizedBox(height: 24),
-        const Text(
-          'گزارش ماهانه',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
+        _modeSelector(),
+        const SizedBox(height: 12),
+        if (reportMode == 0)
+          _dateField(
+            title: 'تاریخ گزارش',
+            value: selectedDate,
+            onTap: _pickDailyDate,
           ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFF101B2E),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
+        if (reportMode == 1) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: gold.withOpacity(.65)),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: month,
+                value: selectedMonth ??
+                    (_months().isNotEmpty ? _months().first : null),
                 isExpanded: true,
-                dropdownColor: const Color(0xFF101B2E),
-                items: months.map((item) {
-                  return DropdownMenuItem<String>(
-                    value: item,
-                    child: Text(_persianMonthName(item)),
-                  );
-                }).toList(),
+                hint: const Text('انتخاب ماه'),
+                dropdownColor: panel,
+                items: _months()
+                    .map(
+                      (month) => DropdownMenuItem(
+                        value: month,
+                        child: Text(jalaliMonthTitle(month)),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value == null) return;
-
                   setState(() {
                     selectedMonth = value;
                   });
@@ -2976,53 +3550,431 @@ class _ReportsPageState extends State<ReportsPage> {
               ),
             ),
           ),
-        ),
+        ],
+        if (reportMode == 2)
+          Row(
+            children: [
+              _dateField(
+                title: 'از تاریخ',
+                value: startDate,
+                onTap: () => _pickDate(start: true),
+              ),
+              const SizedBox(width: 8),
+              _dateField(
+                title: 'تا تاریخ',
+                value: endDate,
+                onTap: () => _pickDate(start: false),
+              ),
+            ],
+          ),
+        if (reportMode == 3)
+          InkWell(
+            onTap: () => _showCitySelector(),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: panel,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: gold.withOpacity(.65)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_city, color: gold),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      selectedCities.isEmpty
+                          ? 'همه شهرها'
+                          : '${selectedCities.length} شهر انتخاب شده',
+                    ),
+                  ),
+                  const Icon(Icons.keyboard_arrow_down),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 14),
         _statCard(
-          title: 'کل بازرسی‌های ماه',
-          value: records.length.toString(),
+          title: 'تعداد بازرسی',
+          value: data.length.toString(),
           icon: Icons.assignment_turned_in,
         ),
         _statCard(
-          title: 'کل مشکلات ماه',
+          title: 'تعداد مشکلات',
           value: problems.toString(),
           icon: Icons.warning_amber_rounded,
         ),
         _statCard(
-          title: 'بازرسی‌های بدون مشکل',
-          value: withoutProblems.toString(),
-          icon: Icons.check_circle_outline,
+          title: 'تعداد روزهای بازرسی',
+          value: days.toString(),
+          icon: Icons.calendar_month,
         ),
         _statCard(
           title: 'درصد مشکلات',
           value: '${percent.toStringAsFixed(1)}٪',
           icon: Icons.percent,
         ),
-        _statCard(
-          title: 'تعداد بازرسی‌های تکراری',
-          value: repeated.toString(),
-          icon: Icons.repeat,
-          onTap: repeated == 0
-              ? null
-              : () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RepeatedInspectionsPage(
-                        inspections: inspections,
-                      ),
-                    ),
-                  );
-                },
-        ),
-        if (repeatedGroups.isNotEmpty) ...[
+        if (reportMode == 3) _cityComparison(data),
+        const SizedBox(height: 6),
+        _managerReportCard(data),
+      ],
+    );
+  }
+
+  Widget _cityComparison(List<Inspection> data) {
+    final groups = _cityGroups(data);
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    final cities = groups.keys.toList()..sort();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gold.withOpacity(.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'مقایسه شهرهای انتخاب‌شده',
+            style: TextStyle(
+              color: gold,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
-          Card(
-            color: const Color(0xFF101B2E),
+          ...cities.map(
+            (city) {
+              final cityData = groups[city]!;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.location_city,
+                  color: gold,
+                ),
+                title: Text(city),
+                subtitle: Text(
+                  'بازرسی: ${cityData.length}  •  مشکلات: ${_problemCount(cityData)}  •  روز: ${_distinctDays(cityData)}',
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _managerReportCard(List<Inspection> data) {
+    final problems = _problemCount(data);
+    final days = _distinctDays(data);
+    final cities = _cityGroups(data);
+    final percent = _problemPercent(data);
+
+    final summary =
+        'گزارش عملکرد بازرسی\n'
+        'تاریخ/بازه: ${_reportTitle()}\n'
+        'تعداد کل بازرسی: ${data.length}\n'
+        'تعداد مشکلات: $problems\n'
+        'تعداد روزهای بازرسی: $days\n'
+        'درصد مشکلات: ${percent.toStringAsFixed(1)}٪\n'
+        'تعداد شهرهای تحت پوشش: ${cities.length}\n';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gold.withOpacity(.65)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'گزارش قابل ارائه به مدیر',
+            style: TextStyle(
+              color: gold,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(summary),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _exportExcel(data),
+                  icon: const Icon(Icons.table_chart),
+                  label: const Text('خروجی Excel'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _exportWord(data),
+                  icon: const Icon(Icons.description),
+                  label: const Text('خروجی Word'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _reportTitle() {
+    switch (reportMode) {
+      case 0:
+        return formatJalaliDate(selectedDate);
+      case 1:
+        final month = selectedMonth ??
+            (_months().isNotEmpty ? _months().first : '');
+        return jalaliMonthTitle(month);
+      case 2:
+        return '${formatJalaliDate(startDate)} تا ${formatJalaliDate(endDate)}';
+      case 3:
+        return selectedCities.isEmpty
+            ? 'همه شهرها'
+            : selectedCities.join('، ');
+      default:
+        return 'همه اطلاعات';
+    }
+  }
+
+  Widget _statsTab() {
+    final today = normalizeJalaliDate(
+      gregorianToJalali(DateTime.now()),
+    );
+    final todayData = inspections
+        .where((e) => normalizeJalaliDate(e.date) == today)
+        .toList();
+
+    final month = selectedMonth ??
+        (_months().isNotEmpty ? _months().first : '');
+    final monthData = month.isEmpty
+        ? <Inspection>[]
+        : inspections.where((e) => _monthOf(e.date) == month).toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        const Text(
+          'آمار کلی',
+          style: TextStyle(
+            color: gold,
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _statCard(
+          title: 'کل بازرسی‌های ثبت‌شده',
+          value: inspections.length.toString(),
+          icon: Icons.assignment_turned_in,
+        ),
+        _statCard(
+          title: 'کل مشکلات',
+          value: _problemCount(inspections).toString(),
+          icon: Icons.warning_amber_rounded,
+        ),
+        _statCard(
+          title: 'امروز',
+          value: todayData.length.toString(),
+          icon: Icons.today,
+        ),
+        _statCard(
+          title: 'این ماه',
+          value: monthData.length.toString(),
+          icon: Icons.calendar_month,
+        ),
+        _statCard(
+          title: 'تعداد روزهای بازرسی',
+          value: _distinctDays(inspections).toString(),
+          icon: Icons.date_range,
+        ),
+        _statCard(
+          title: 'تعداد شهرها',
+          value: _cities().length.toString(),
+          icon: Icons.location_city,
+        ),
+        const SizedBox(height: 10),
+        if (month.isNotEmpty)
+          _statCard(
+            title: 'بازرسی‌های تکراری این ماه',
+            value: _repeatedCount(month).toString(),
+            icon: Icons.repeat,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => RepeatedInspectionsPage(
+                    inspections: inspections,
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  int _repeatedCount(String month) {
+    final groups = <String, int>{};
+
+    for (final item in inspections) {
+      if (_monthOf(item.date) != month) continue;
+      final code = item.agentCode.trim();
+      if (code.isEmpty) continue;
+      groups[code] = (groups[code] ?? 0) + 1;
+    }
+
+    return groups.values
+        .where((count) => count >= 2)
+        .fold<int>(0, (sum, count) => sum + count);
+  }
+
+  Widget _chartsTab() {
+    final data = _recordsForChart();
+    final groups = _cityGroups(data);
+
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: gold.withOpacity(.65)),
+          ),
+          child: Column(
+            children: [
+              DropdownButtonFormField<String>(
+                value: _chartRangeValue,
+                dropdownColor: panel,
+                decoration: const InputDecoration(
+                  labelText: 'بازه زمانی',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'all',
+                    child: Text('همه اطلاعات'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'month',
+                    child: Text('ماه انتخاب‌شده'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'range',
+                    child: Text('بین دو تاریخ'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() {
+                    _chartRangeValue = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+              if (_chartRangeValue == 'month')
+                DropdownButtonFormField<String>(
+                  value: selectedMonth ??
+                      (_months().isNotEmpty ? _months().first : null),
+                  dropdownColor: panel,
+                  decoration: const InputDecoration(
+                    labelText: 'ماه',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _months()
+                      .map(
+                        (month) => DropdownMenuItem(
+                          value: month,
+                          child: Text(jalaliMonthTitle(month)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      selectedMonth = value;
+                    });
+                  },
+                ),
+              if (_chartRangeValue == 'range')
+                Row(
+                  children: [
+                    _dateField(
+                      title: 'از تاریخ',
+                      value: startDate,
+                      onTap: () => _pickDate(start: true),
+                    ),
+                    const SizedBox(width: 8),
+                    _dateField(
+                      title: 'تا تاریخ',
+                      value: endDate,
+                      onTap: () => _pickDate(start: false),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => _showCitySelector(forCharts: true),
+                borderRadius: BorderRadius.circular(10),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'انتخاب شهرها',
+                    border: OutlineInputBorder(),
+                  ),
+                  child: Text(
+                    selectedCities.isEmpty
+                        ? 'همه شهرها'
+                        : selectedCities.join('، '),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (groups.isEmpty)
+          const Card(
+            color: panel,
             child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Text(
-                '${repeatedGroups.length} کد عامل در این ماه حداقل ۲ بار بازرسی شده‌اند.',
-                style: const TextStyle(fontSize: 14),
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text('داده‌ای برای نمودار وجود ندارد'),
+              ),
+            ),
+          )
+        else ...[
+          _chartCard(
+            title: 'درصد بازرسی هر شهر',
+            data: groups.map(
+              (city, value) => MapEntry(city, value.length.toDouble()),
+            ),
+            percentage: true,
+          ),
+          _chartCard(
+            title: 'تعداد بازرسی هر شهر',
+            data: groups.map(
+              (city, value) => MapEntry(city, value.length.toDouble()),
+            ),
+          ),
+          _chartCard(
+            title: 'تعداد مشکلات هر شهر',
+            data: groups.map(
+              (city, value) => MapEntry(
+                city,
+                _problemCount(value).toDouble(),
               ),
             ),
           ),
@@ -3031,134 +3983,468 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  Widget _cityReport() {
-    final records = selectedMonth == null
-        ? inspections
-        : _recordsForMonth(selectedMonth!);
+  String _chartRangeValue = 'all';
 
-    final groups = _cityGroups(records);
+  List<Inspection> _recordsForChart() {
+    List<Inspection> result;
 
-    if (groups.isEmpty) {
-      return const SizedBox.shrink();
+    switch (_chartRangeValue) {
+      case 'month':
+        final month = selectedMonth ??
+            (_months().isNotEmpty ? _months().first : '');
+        result = month.isEmpty
+            ? []
+            : inspections.where((e) => _monthOf(e.date) == month).toList();
+        break;
+      case 'range':
+        result = _dateRangeRecords(startDate, endDate);
+        break;
+      default:
+        result = [...inspections];
     }
 
-    final cities = groups.keys.toList();
-    cities.sort(
-      (a, b) => groups[b]!.length.compareTo(groups[a]!.length),
-    );
+    if (selectedCities.isNotEmpty) {
+      result = result
+          .where((e) => selectedCities.contains(e.city.trim()))
+          .toList();
+    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 24),
-        const Text(
-          'آمار شهرها',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
+    return result;
+  }
+
+  Widget _chartCard({
+    required String title,
+    required Map<String, double> data,
+    bool percentage = false,
+  }) {
+    final total = data.values.fold<double>(0, (a, b) => a + b);
+    final sorted = data.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gold.withOpacity(.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: gold,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        ...cities.map((city) {
-          final cityRecords = groups[city]!;
-          final problems = _problemCount(cityRecords);
-          final percent = _problemPercent(cityRecords);
+          const SizedBox(height: 14),
+          ...sorted.map((entry) {
+            final percent = total == 0 ? 0 : entry.value / total;
+            final label = percentage
+                ? '${(percent * 100).toStringAsFixed(1)}٪'
+                : entry.value.toStringAsFixed(0);
 
-          return Card(
-            color: const Color(0xFF101B2E),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.location_city,
-                        color: Color(0xFFC9A227),
-                      ),
-                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          city,
+                          entry.key,
                           style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                      ),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: gold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Text('تعداد بازرسی: ${cityRecords.length}'),
-                  const SizedBox(height: 4),
-                  Text('تعداد مشکلات: $problems'),
-                  const SizedBox(height: 4),
-                  Text(
-                    'درصد مشکل: ${percent.toStringAsFixed(1)}٪',
-                    style: const TextStyle(
-                      color: Color(0xFFC9A227),
-                      fontWeight: FontWeight.bold,
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: percent,
+                      minHeight: 13,
+                      backgroundColor: Colors.white10,
+                      color: gold,
                     ),
                   ),
                 ],
               ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _agentHistoryTab() {
+    final query = agentSearch.trim();
+
+    final data = inspections.where((item) {
+      if (query.isEmpty) return false;
+      return item.agentCode.contains(query) ||
+          item.agentName.contains(query);
+    }).toList();
+
+    final groups = _agentGroups(data);
+
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        TextField(
+          controller: agentSearchController,
+          onChanged: (value) {
+            setState(() {
+              agentSearch = value;
+            });
+          },
+          decoration: const InputDecoration(
+            labelText: 'جستجوی کد یا نام عامل',
+            prefixIcon: Icon(Icons.search),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (query.isEmpty)
+          const Card(
+            color: panel,
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'کد یا نام عامل را وارد کنید تا تمام سوابق، تاریخ‌ها و تعداد بازرسی‌ها نمایش داده شود.',
+                textAlign: TextAlign.center,
+              ),
             ),
-          );
-        }),
+          )
+        else if (groups.isEmpty)
+          const Card(
+            color: panel,
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'برای این عامل سابقه‌ای پیدا نشد.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          )
+        else
+          ...groups.entries.map(
+            (entry) {
+              final records = [...entry.value]
+                ..sort(
+                  (a, b) => jalaliDateKey(b.date)
+                      .compareTo(jalaliDateKey(a.date)),
+                );
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: panel,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: gold.withOpacity(.65)),
+                ),
+                child: ExpansionTile(
+                  title: Text(
+                    entry.key,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: gold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${records.length} بار بازرسی',
+                  ),
+                  children: records.map(
+                    (item) {
+                      return ListTile(
+                        leading: const Icon(
+                          Icons.calendar_month,
+                          color: gold,
+                        ),
+                        title: Text(
+                          formatJalaliDate(item.date),
+                        ),
+                        subtitle: Text(
+                          '${item.agentName.isEmpty ? 'بدون نام' : item.agentName}  •  ${item.city.isEmpty ? 'بدون شهر' : item.city}',
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  InspectionDetailsPage(
+                                inspection: item,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ).toList(),
+                ),
+              );
+            },
+          ),
       ],
     );
   }
 
+  Future<void> _exportExcel(List<Inspection> data) async {
+    try {
+      final workbook = Excel.createExcel();
+      final sheet = workbook['گزارش'];
+      final cities = _cityGroups(data);
+
+      final rows = <List<String>>[
+        ['گزارش عملکرد بازرسی'],
+        ['بازه', _reportTitle()],
+        ['تعداد بازرسی', data.length.toString()],
+        ['تعداد مشکلات', _problemCount(data).toString()],
+        ['تعداد روزهای بازرسی', _distinctDays(data).toString()],
+        ['درصد مشکلات', '${_problemPercent(data).toStringAsFixed(1)}٪'],
+        [],
+        ['شهر', 'تعداد بازرسی', 'تعداد مشکلات', 'تعداد روزهای بازرسی'],
+      ];
+
+      for (final entry in cities.entries) {
+        rows.add([
+          entry.key,
+          entry.value.length.toString(),
+          _problemCount(entry.value).toString(),
+          _distinctDays(entry.value).toString(),
+        ]);
+      }
+
+      rows.add([]);
+      rows.add(['تاریخ', 'کد عامل', 'نام عامل', 'شهر', 'مشکل']);
+
+      for (final item in data) {
+        rows.add([
+          formatJalaliDate(item.date),
+          item.agentCode,
+          item.agentName,
+          item.city,
+          _hasProblem(item) ? 'دارد' : 'ندارد',
+        ]);
+      }
+
+      for (var r = 0; r < rows.length; r++) {
+        for (var c = 0; c < rows[r].length; c++) {
+          sheet.updateCell(
+            CellIndex.indexByColumnRow(
+              columnIndex: c,
+              rowIndex: r,
+            ),
+            TextCellValue(rows[r][c]),
+          );
+        }
+      }
+
+      for (var c = 0; c < 5; c++) {
+        sheet.setColumnWidth(c, c == 0 ? 18 : 22);
+      }
+
+      final bytes = workbook.save();
+      if (bytes == null) {
+        throw Exception('خطا در ساخت Excel');
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File(
+        '${directory.path}/گزارش_بازرسی_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      );
+      await file.writeAsBytes(bytes, flush: true);
+
+      await OpenFilex.open(file.path);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('فایل Excel ساخته شد'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطا در ساخت Excel: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportWord(List<Inspection> data) async {
+    try {
+      final document = docx.loadDocxDocument();
+
+      document.addHeading(
+        text: 'گزارش عملکرد بازرسی',
+        level: 1,
+      );
+
+      document.addParagraph(
+        text: 'بازه گزارش: ${_reportTitle()}',
+      );
+      document.addParagraph(
+        text: 'تعداد کل بازرسی: ${data.length}',
+      );
+      document.addParagraph(
+        text: 'تعداد مشکلات: ${_problemCount(data)}',
+      );
+      document.addParagraph(
+        text: 'تعداد روزهای بازرسی: ${_distinctDays(data)}',
+      );
+      document.addParagraph(
+        text:
+            'درصد مشکلات: ${_problemPercent(data).toStringAsFixed(1)}٪',
+      );
+
+      final cities = _cityGroups(data);
+
+      if (cities.isNotEmpty) {
+        document.addHeading(
+          text: 'آمار شهرها',
+          level: 2,
+        );
+
+        final table = document.addTable(
+          cities.length + 1,
+          4,
+          style: 'Table Grid',
+        );
+
+        table.cell(0, 0).text = 'شهر';
+        table.cell(0, 1).text = 'بازرسی';
+        table.cell(0, 2).text = 'مشکلات';
+        table.cell(0, 3).text = 'روز';
+
+        var row = 1;
+        for (final entry in cities.entries) {
+          table.cell(row, 0).text = entry.key;
+          table.cell(row, 1).text = entry.value.length.toString();
+          table.cell(row, 2).text =
+              _problemCount(entry.value).toString();
+          table.cell(row, 3).text =
+              _distinctDays(entry.value).toString();
+          row++;
+        }
+      }
+
+      document.addHeading(
+        text: 'جزئیات بازرسی‌ها',
+        level: 2,
+      );
+
+      final table = document.addTable(
+        data.length + 1,
+        5,
+        style: 'Table Grid',
+      );
+
+      table.cell(0, 0).text = 'تاریخ';
+      table.cell(0, 1).text = 'کد عامل';
+      table.cell(0, 2).text = 'نام عامل';
+      table.cell(0, 3).text = 'شهر';
+      table.cell(0, 4).text = 'مشکل';
+
+      for (var i = 0; i < data.length; i++) {
+        final item = data[i];
+        final row = i + 1;
+        table.cell(row, 0).text =
+            formatJalaliDate(item.date);
+        table.cell(row, 1).text = item.agentCode;
+        table.cell(row, 2).text = item.agentName;
+        table.cell(row, 3).text = item.city;
+        table.cell(row, 4).text =
+            _hasProblem(item) ? 'دارد' : 'ندارد';
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File(
+        '${directory.path}/گزارش_بازرسی_${DateTime.now().millisecondsSinceEpoch}.docx',
+      );
+
+      document.save(file.path);
+
+      await OpenFilex.open(file.path);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('فایل Word ساخته شد'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('خطا در ساخت Word: $e'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('آمار و گزارش‌ها'),
+    if (isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('آمار و گزارش‌ها'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('آمار و گزارش‌ها'),
+          bottom: TabBar(
+            controller: tabController,
+            isScrollable: true,
+            labelColor: gold,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: gold,
+            tabs: const [
+              Tab(text: 'آمار'),
+              Tab(text: 'گزارش‌ها'),
+              Tab(text: 'نمودارها'),
+              Tab(text: 'سوابق عامل'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          controller: tabController,
+          children: [
+            _statsTab(),
+            _reportsTab(),
+            _chartsTab(),
+            _agentHistoryTab(),
+          ],
+        ),
       ),
-      body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadInspections,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  if (inspections.isEmpty)
-                    const Card(
-                      color: Color(0xFF101B2E),
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.bar_chart,
-                              size: 64,
-                              color: Color(0xFFC9A227),
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'هنوز هیچ بازرسی‌ای ثبت نشده است.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else ...[
-                    _dailyReport(),
-                    _monthlyReport(),
-                    _cityReport(),
-                  ],
-                ],
-              ),
-            ),
     );
   }
 }
-
 
 class SettingsPage
     extends StatelessWidget {
