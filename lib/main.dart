@@ -2604,74 +2604,98 @@ class DailyPerformancePage
   }
 }
 
+// =====================================================
+// گزارش‌ها و آمار پیشرفته
+// =====================================================
+
 class ReportsPage extends StatefulWidget {
-  const ReportsPage({
-    super.key,
-  });
+  const ReportsPage({super.key});
 
   @override
   State<ReportsPage> createState() => _ReportsPageState();
 }
 
+enum ReportPeriodMode { currentMonth, dateRange }
+
 class _ReportsPageState extends State<ReportsPage> {
   List<Inspection> inspections = [];
   bool isLoading = true;
-  String selectedDate = '';
-  String? selectedMonth;
+  ReportPeriodMode periodMode = ReportPeriodMode.currentMonth;
+  String selectedMonth = '';
+  String startDate = '';
+  String endDate = '';
+  String? cityOne;
+  String? cityTwo;
+  bool exporting = false;
 
   @override
   void initState() {
     super.initState();
-    selectedDate = gregorianToJalali(DateTime.now());
+    final today = gregorianToJalali(DateTime.now());
+    selectedMonth = _getMonth(today);
+    startDate = today;
+    endDate = today;
     _loadInspections();
   }
 
   Future<void> _loadInspections() async {
-    final data = await AppStorage.getInspections();
-
-    if (!mounted) return;
-
-    setState(() {
-      inspections = data;
-      isLoading = false;
-    });
+    try {
+      final data = await AppStorage.getInspections();
+      if (!mounted) return;
+      setState(() {
+        inspections = data;
+        isLoading = false;
+        _ensureCities();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        inspections = [];
+        isLoading = false;
+      });
+    }
   }
+
+  String _normalizeDigits(String value) {
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    const english = '0123456789';
+    var result = value;
+    for (int i = 0; i < 10; i++) {
+      result = result.replaceAll(persian[i], english[i]);
+      result = result.replaceAll(arabic[i], english[i]);
+    }
+    return result;
+  }
+
+  String _toPersian(String value) => toPersianDigits(value);
 
   String _getMonth(String date) {
-    final parts = date.split('/');
-
-    if (parts.length >= 2) {
-      return '${parts[0]}/${parts[1]}';
-    }
-
-    return date;
+    final parts = date.trim().split('/');
+    if (parts.length < 2) return '';
+    return '${_normalizeDigits(parts[0])}/${_normalizeDigits(parts[1]).padLeft(2, '0')}';
   }
 
-  int _monthNumber(String month) {
-    final parts = month.split('/');
-
-    if (parts.length != 2) {
-      return 0;
-    }
-
-    var value = parts[1];
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const english = '0123456789';
-
-    for (int i = 0; i < persian.length; i++) {
-      value = value.replaceAll(persian[i], english[i]);
-    }
-
-    return int.tryParse(value) ?? 0;
+  int _dateKey(String date) {
+    final parts = _normalizeDigits(date).split('/');
+    if (parts.length < 3) return 0;
+    final y = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    final d = int.tryParse(parts[2]) ?? 0;
+    return y * 10000 + m * 100 + d;
   }
 
-  String _persianMonthName(String month) {
-    final parts = month.split('/');
+  int _monthKey(String month) {
+    final parts = _normalizeDigits(month).split('/');
+    if (parts.length < 2) return 0;
+    final y = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+    return y * 100 + m;
+  }
 
-    if (parts.length != 2) {
-      return month;
-    }
-
+  String _monthName(String month) {
+    final parts = _normalizeDigits(month).split('/');
+    if (parts.length != 2) return month;
     const names = [
       '',
       'فروردین',
@@ -2687,130 +2711,206 @@ class _ReportsPageState extends State<ReportsPage> {
       'بهمن',
       'اسفند',
     ];
-
-    final number = _monthNumber(month);
-
-    if (number >= 1 && number <= 12) {
-      return '${names[number]} ${parts[0]}';
-    }
-
-    return month;
+    final m = int.tryParse(parts[1]) ?? 0;
+    if (m < 1 || m > 12) return month;
+    return '${names[m]} ${_toPersian(parts[0])}';
   }
 
   List<String> get _months {
     final result = inspections
-        .map((item) => _getMonth(item.date))
-        .where((month) => month.isNotEmpty)
+        .map((e) => _getMonth(e.date))
+        .where((e) => e.isNotEmpty)
         .toSet()
         .toList();
-
-    result.sort((a, b) => b.compareTo(a));
+    result.sort((a, b) => _monthKey(b).compareTo(_monthKey(a)));
+    if (selectedMonth.isNotEmpty && !result.contains(selectedMonth)) {
+      result.insert(0, selectedMonth);
+    }
     return result;
   }
 
-  List<Inspection> _recordsForDate(String date) {
-    return inspections
-        .where((item) => item.date.trim() == date.trim())
+  List<String> get _cities {
+    final result = inspections
+        .map((e) => e.city.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
         .toList();
+    result.sort();
+    return result;
   }
 
-  List<Inspection> _recordsForMonth(String month) {
-    return inspections
-        .where((item) => _getMonth(item.date) == month)
-        .toList();
+  void _ensureCities() {
+    final cities = _cities;
+    if (cities.isEmpty) {
+      cityOne = null;
+      cityTwo = null;
+      return;
+    }
+    cityOne ??= cities.first;
+    if (cityTwo == null && cities.length > 1) {
+      cityTwo = cities[1];
+    }
+    if (!cities.contains(cityOne)) cityOne = cities.first;
+    if (cityTwo != null && !cities.contains(cityTwo)) {
+      cityTwo = cities.length > 1 ? cities[1] : null;
+    }
+    if (cityTwo == cityOne && cities.length > 1) {
+      cityTwo = cities.firstWhere((c) => c != cityOne);
+    }
   }
 
-  bool _hasProblem(Inspection item) {
-    return item.problems.trim().isNotEmpty;
+  List<Inspection> get _periodRecords {
+    if (periodMode == ReportPeriodMode.currentMonth) {
+      return inspections.where((e) => _getMonth(e.date) == selectedMonth).toList();
+    }
+    final start = _dateKey(startDate);
+    final end = _dateKey(endDate);
+    final from = start <= end ? start : end;
+    final to = start <= end ? end : start;
+    return inspections.where((e) {
+      final key = _dateKey(e.date);
+      return key >= from && key <= to;
+    }).toList();
   }
 
-  int _problemCount(List<Inspection> records) {
-    return records.where(_hasProblem).length;
-  }
+  bool _hasProblem(Inspection item) => item.problems.trim().isNotEmpty;
+
+  int _problemCount(List<Inspection> records) => records.where(_hasProblem).length;
 
   double _problemPercent(List<Inspection> records) {
-    if (records.isEmpty) {
-      return 0;
-    }
-
+    if (records.isEmpty) return 0;
     return (_problemCount(records) / records.length) * 100;
   }
 
-  Map<String, List<Inspection>> _repeatedGroups(String month) {
-    final Map<String, List<Inspection>> groups = {};
-
-    for (final item in _recordsForMonth(month)) {
-      final code = item.agentCode.trim();
-
-      if (code.isEmpty) {
-        continue;
-      }
-
-      groups.putIfAbsent(code, () => []).add(item);
-    }
-
-    groups.removeWhere((key, value) => value.length < 2);
-    return groups;
-  }
-
-  int _repeatedInspectionCount(String month) {
-    final groups = _repeatedGroups(month);
-    int total = 0;
-
-    for (final records in groups.values) {
-      total += records.length;
-    }
-
-    return total;
-  }
-
-  Map<String, List<Inspection>> _cityGroups(
-    List<Inspection> records,
-  ) {
-    final Map<String, List<Inspection>> groups = {};
-
+  Map<String, List<Inspection>> _cityGroups(List<Inspection> records) {
+    final Map<String, List<Inspection>> result = {};
     for (final item in records) {
       final city = item.city.trim();
-
-      if (city.isEmpty) {
-        continue;
-      }
-
-      groups.putIfAbsent(city, () => []).add(item);
+      if (city.isEmpty) continue;
+      result.putIfAbsent(city, () => []).add(item);
     }
-
-    return groups;
+    return result;
   }
 
-  Future<void> _selectDate() async {
-    final picked = await showDatePicker(
+  List<Inspection> _cityRecords(String? city) {
+    if (city == null || city.isEmpty) return [];
+    return _periodRecords.where((e) => e.city.trim() == city).toList();
+  }
+
+  Future<String?> _pickJalaliDate({String? initial}) async {
+    final parts = _normalizeDigits(initial ?? gregorianToJalali(DateTime.now())).split('/');
+    int year = int.tryParse(parts.length > 0 ? parts[0] : '') ?? 1405;
+    int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
+    int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
+    month = month.clamp(1, 12).toInt();
+    day = day.clamp(1, _jalaliMonthDays(year, month)).toInt();
+
+    final result = await showDialog<String>(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(
-        const Duration(days: 365),
-      ),
-      helpText: 'انتخاب تاریخ گزارش',
-      cancelText: 'انصراف',
-      confirmText: 'تأیید',
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final maxDay = _jalaliMonthDays(year, month);
+            if (day > maxDay) day = maxDay;
+            final years = List<int>.generate(31, (i) => year - 15 + i);
+            return AlertDialog(
+              title: const Text('انتخاب تاریخ شمسی'),
+              content: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: day,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'روز'),
+                        items: List.generate(maxDay, (i) => i + 1)
+                            .map((v) => DropdownMenuItem(value: v, child: Text(_toPersian('$v'))))
+                            .toList(),
+                        onChanged: (v) => setDialogState(() => day = v ?? day),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: month,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'ماه'),
+                        items: List.generate(12, (i) => i + 1)
+                            .map((v) => DropdownMenuItem(value: v, child: Text(_monthName('1405/${v.toString().padLeft(2, '0')}').split(' ').first)))
+                            .toList(),
+                        onChanged: (v) => setDialogState(() {
+                          month = v ?? month;
+                          day = day.clamp(1, _jalaliMonthDays(year, month)).toInt();
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value: year,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'سال'),
+                        items: years
+                            .map((v) => DropdownMenuItem(value: v, child: Text(_toPersian('$v'))))
+                            .toList(),
+                        onChanged: (v) => setDialogState(() {
+                          year = v ?? year;
+                          day = day.clamp(1, _jalaliMonthDays(year, month)).toInt();
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    '${_toPersian(year.toString().padLeft(4, '0'))}/${_toPersian(month.toString().padLeft(2, '0'))}/${_toPersian(day.toString().padLeft(2, '0'))}',
+                  ),
+                  child: const Text('تأیید'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+    return result;
+  }
 
-    if (picked == null || !mounted) {
-      return;
-    }
+  int _jalaliMonthDays(int year, int month) {
+    if (month <= 6) return 31;
+    if (month <= 11) return 30;
+    return _isJalaliLeap(year) ? 30 : 29;
+  }
 
-    setState(() {
-      selectedDate = gregorianToJalali(picked);
-    });
+  bool _isJalaliLeap(int year) {
+    final mod = year % 33;
+    const leapRemainders = [1, 5, 9, 13, 17, 22, 26, 30];
+    return leapRemainders.contains(mod);
+  }
+
+  Future<void> _selectRangeStart() async {
+    final value = await _pickJalaliDate(initial: startDate);
+    if (value == null) return;
+    setState(() => startDate = value);
+  }
+
+  Future<void> _selectRangeEnd() async {
+    final value = await _pickJalaliDate(initial: endDate);
+    if (value == null) return;
+    setState(() => endDate = value);
   }
 
   Widget _statCard({
     required String title,
     required String value,
     required IconData icon,
-    VoidCallback? onTap,
   }) {
-    final card = Card(
+    return Card(
       color: const Color(0xFF101B2E),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -2823,287 +2923,349 @@ class _ReportsPageState extends State<ReportsPage> {
                 color: const Color(0xFFC9A227),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                icon,
-                color: Colors.black,
-              ),
+              child: Icon(icon, color: Colors.black),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                color: Color(0xFFC9A227),
-                fontSize: 23,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (onTap != null) ...[
-              const SizedBox(width: 6),
-              const Icon(Icons.chevron_right),
-            ],
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+            Text(value, style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
     );
+  }
 
-    if (onTap == null) {
-      return card;
-    }
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: card,
+  Widget _periodSelector() {
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Expanded(
+              child: ChoiceChip(
+                label: const SizedBox(width: double.infinity, child: Center(child: Text('ماه جاری'))),
+                selected: periodMode == ReportPeriodMode.currentMonth,
+                onSelected: (_) => setState(() => periodMode = ReportPeriodMode.currentMonth),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ChoiceChip(
+                label: const SizedBox(width: double.infinity, child: Center(child: Text('بین دو تاریخ'))),
+                selected: periodMode == ReportPeriodMode.dateRange,
+                onSelected: (_) => setState(() => periodMode = ReportPeriodMode.dateRange),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _dailyReport() {
-    final records = _recordsForDate(selectedDate);
-    final problems = _problemCount(records);
-    final withoutProblems = records.length - problems;
-    final percent = _problemPercent(records);
+  Widget _periodDetails() {
+    if (periodMode == ReportPeriodMode.currentMonth) {
+      final months = _months;
+      if (months.isEmpty) return const SizedBox.shrink();
+      if (!months.contains(selectedMonth)) selectedMonth = months.first;
+      return Card(
+        color: const Color(0xFF101B2E),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedMonth,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF101B2E),
+              icon: const Icon(Icons.calendar_month),
+              items: months.map((m) => DropdownMenuItem(value: m, child: Text(_monthName(m)))).toList(),
+              onChanged: (v) => setState(() => selectedMonth = v ?? selectedMonth),
+            ),
+          ),
+        ),
+      );
+    }
 
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: _dateButton('از تاریخ', startDate, _selectRangeStart)),
+                const SizedBox(width: 8),
+                Expanded(child: _dateButton('تا تاریخ', endDate, _selectRangeEnd)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text('بازه انتخابی شامل هر دو تاریخ ابتدا و انتها است.'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dateButton(String title, String date, VoidCallback onTap) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.event),
+      label: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [Text(title, style: const TextStyle(fontSize: 12)), Text(date)],
+      ),
+    );
+  }
+
+  Widget _citySelectors() {
+    final cities = _cities;
+    if (cities.isEmpty) {
+      return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('برای مقایسه شهرها هنوز شهری ثبت نشده است.')));
+    }
+    _ensureCities();
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('انتخاب دو شهر برای مقایسه', style: TextStyle(color: Color(0xFFC9A227), fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: _cityDropdown('شهر اول', cityOne, (v) => setState(() { cityOne = v; if (cityTwo == cityOne && cities.length > 1) cityTwo = cities.firstWhere((c) => c != cityOne); }))),
+                const SizedBox(width: 8),
+                Expanded(child: _cityDropdown('شهر دوم', cityTwo, (v) => setState(() { cityTwo = v; if (cityTwo == cityOne && cities.length > 1) cityOne = cities.firstWhere((c) => c != cityTwo); }))),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cityDropdown(String label, String? value, ValueChanged<String?> onChanged) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      items: _cities.map((city) => DropdownMenuItem(value: city, child: Text(city, overflow: TextOverflow.ellipsis))).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _summary() {
+    final records = _periodRecords;
+    final problems = _problemCount(records);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'گزارش روزانه',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFF101B2E),
-          child: ListTile(
-            leading: const Icon(
-              Icons.calendar_month,
-              color: Color(0xFFC9A227),
-            ),
-            title: const Text('تاریخ گزارش'),
-            subtitle: Text(selectedDate),
-            trailing: const Icon(Icons.edit_calendar),
-            onTap: _selectDate,
-          ),
-        ),
-        _statCard(
-          title: 'تعداد بازرسی انجام‌شده',
-          value: records.length.toString(),
-          icon: Icons.assignment_turned_in,
-        ),
-        _statCard(
-          title: 'تعداد دارای مشکل',
-          value: problems.toString(),
-          icon: Icons.warning_amber_rounded,
-        ),
-        _statCard(
-          title: 'تعداد بدون مشکل',
-          value: withoutProblems.toString(),
-          icon: Icons.check_circle_outline,
-        ),
-        _statCard(
-          title: 'درصد دارای مشکل',
-          value: '${percent.toStringAsFixed(1)}٪',
-          icon: Icons.percent,
-        ),
+        const Text('خلاصه گزارش', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
+        _statCard(title: 'کل بازرسی‌ها', value: _toPersian('${records.length}'), icon: Icons.assignment_turned_in),
+        _statCard(title: 'بازرسی‌های دارای مشکل', value: _toPersian('$problems'), icon: Icons.warning_amber_rounded),
+        _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('${records.length - problems}'), icon: Icons.check_circle_outline),
+        _statCard(title: 'درصد مشکلات', value: '${_toPersian(_problemPercent(records).toStringAsFixed(1))}٪', icon: Icons.percent),
       ],
     );
   }
 
-  Widget _monthlyReport() {
-    final months = _months;
-
-    if (months.isEmpty) {
-      return const SizedBox.shrink();
+  Widget _cityComparison() {
+    final first = _cityRecords(cityOne);
+    final second = _cityRecords(cityTwo);
+    if (cityOne == null || cityTwo == null) {
+      return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('برای نمودار، دو شهر انتخاب کنید.')));
     }
-
-    final month = selectedMonth ?? months.first;
-    final records = _recordsForMonth(month);
-    final problems = _problemCount(records);
-    final withoutProblems = records.length - problems;
-    final percent = _problemPercent(records);
-    final repeated = _repeatedInspectionCount(month);
-    final repeatedGroups = _repeatedGroups(month);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text(
-          'گزارش ماهانه',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        const SizedBox(height: 20),
+        const Text('مقایسه دو شهر', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFF101B2E),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: month,
-                isExpanded: true,
-                dropdownColor: const Color(0xFF101B2E),
-                items: months.map((item) {
-                  return DropdownMenuItem<String>(
-                    value: item,
-                    child: Text(_persianMonthName(item)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-
-                  setState(() {
-                    selectedMonth = value;
-                  });
-                },
-              ),
-            ),
-          ),
-        ),
-        _statCard(
-          title: 'کل بازرسی‌های ماه',
-          value: records.length.toString(),
-          icon: Icons.assignment_turned_in,
-        ),
-        _statCard(
-          title: 'کل مشکلات ماه',
-          value: problems.toString(),
-          icon: Icons.warning_amber_rounded,
-        ),
-        _statCard(
-          title: 'بازرسی‌های بدون مشکل',
-          value: withoutProblems.toString(),
-          icon: Icons.check_circle_outline,
-        ),
-        _statCard(
-          title: 'درصد مشکلات',
-          value: '${percent.toStringAsFixed(1)}٪',
-          icon: Icons.percent,
-        ),
-        _statCard(
-          title: 'تعداد بازرسی‌های تکراری',
-          value: repeated.toString(),
-          icon: Icons.repeat,
-          onTap: repeated == 0
-              ? null
-              : () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RepeatedInspectionsPage(
-                        inspections: inspections,
-                      ),
-                    ),
-                  );
-                },
-        ),
-        if (repeatedGroups.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Card(
-            color: const Color(0xFF101B2E),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Text(
-                '${repeatedGroups.length} کد عامل در این ماه حداقل ۲ بار بازرسی شده‌اند.',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          ),
-        ],
+        _comparisonBar('تعداد بازرسی', first.length.toDouble(), second.length.toDouble(), cityOne!, cityTwo!, integer: true),
+        _comparisonBar('تعداد مشکلات', _problemCount(first).toDouble(), _problemCount(second).toDouble(), cityOne!, cityTwo!, integer: true),
+        _comparisonBar('درصد مشکلات', _problemPercent(first), _problemPercent(second), cityOne!, cityTwo!, percentage: true),
       ],
     );
   }
 
-  Widget _cityReport() {
-    final records = selectedMonth == null
-        ? inspections
-        : _recordsForMonth(selectedMonth!);
-
-    final groups = _cityGroups(records);
-
-    if (groups.isEmpty) {
-      return const SizedBox.shrink();
+  Widget _comparisonBar(String title, double first, double second, String firstName, String secondName, {bool percentage = false, bool integer = false}) {
+    final maxValue = [first, second, 1.0].reduce((a, b) => a > b ? a : b);
+    String format(double value) {
+      if (percentage) return '${_toPersian(value.toStringAsFixed(1))}٪';
+      if (integer) return _toPersian(value.round().toString());
+      return _toPersian(value.toStringAsFixed(1));
     }
-
-    final cities = groups.keys.toList();
-    cities.sort(
-      (a, b) => groups[b]!.length.compareTo(groups[a]!.length),
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text('$firstName: ${format(first)}'),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(value: (first / maxValue).clamp(0, 1).toDouble()),
+            const SizedBox(height: 12),
+            Text('$secondName: ${format(second)}'),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(value: (second / maxValue).clamp(0, 1).toDouble()),
+          ],
+        ),
+      ),
     );
+  }
 
+  Future<void> _exportExcel() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final records = _periodRecords;
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${directory.path}/گزارش_بازرسی_$stamp.xls');
+      String esc(String value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+      final rows = StringBuffer();
+      rows.writeln('<Row><Cell><Data ss:Type="String">تاریخ</Data></Cell><Cell><Data ss:Type="String">کد عامل</Data></Cell><Cell><Data ss:Type="String">نام عامل</Data></Cell><Cell><Data ss:Type="String">شهر</Data></Cell><Cell><Data ss:Type="String">مشکل</Data></Cell></Row>');
+      for (final item in records) {
+        rows.writeln('<Row><Cell><Data ss:Type="String">${esc(item.date)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.agentCode)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.agentName)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.city)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.problems.isEmpty ? 'خیر' : 'بله')}</Data></Cell></Row>');
+      }
+      final xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="گزارش بازرسی"><Table>${rows.toString()}</Table></Worksheet></Workbook>''';
+      await file.writeAsString(xml, encoding: utf8);
+      await OpenFilex.open(file.path);
+      if (mounted) _showExportMessage('خروجی Excel آماده شد.');
+    } catch (_) {
+      if (mounted) _showExportMessage('خطا در ساخت خروجی Excel');
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final records = _periodRecords;
+      final directory = await getApplicationDocumentsDirectory();
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${directory.path}/گزارش_مدیریتی_$stamp.pdf');
+
+      String pdfSafe(String value) => value.codeUnits.map((c) => c >= 32 && c <= 126 ? String.fromCharCode(c) : '?').join();
+      final reportLines = <String>[
+        'Inspection Management Report',
+        'Period: ${pdfSafe(_reportTitleForFile())}',
+        'Total inspections: ${records.length}',
+        'Inspections with problems: ${_problemCount(records)}',
+        'Inspections without problems: ${records.length - _problemCount(records)}',
+        'Problem percentage: ${_problemPercent(records).toStringAsFixed(1)}%',
+        'City 1: ${pdfSafe(cityOne ?? '-')}',
+        'City 1 inspections: ${_cityRecords(cityOne).length}',
+        'City 1 problems: ${_problemCount(_cityRecords(cityOne))}',
+        'City 1 problem percentage: ${_problemPercent(_cityRecords(cityOne)).toStringAsFixed(1)}%',
+        'City 2: ${pdfSafe(cityTwo ?? '-')}',
+        'City 2 inspections: ${_cityRecords(cityTwo).length}',
+        'City 2 problems: ${_problemCount(_cityRecords(cityTwo))}',
+        'City 2 problem percentage: ${_problemPercent(_cityRecords(cityTwo)).toStringAsFixed(1)}%',
+      ];
+
+      String pdfEscape(String value) => value.replaceAll(r'\', r'\\').replaceAll('(', r'\(').replaceAll(')', r'\)');
+      final content = StringBuffer('BT\n/F1 13 Tf\n50 790 Td\n');
+      for (int i = 0; i < reportLines.length; i++) {
+        if (i > 0) content.write('0 -28 Td\n');
+        content.write('(${pdfEscape(reportLines[i])}) Tj\n');
+      }
+      content.write('ET');
+      final contentBytes = utf8.encode(content.toString());
+
+      final objects = <String>[
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+        '<< /Length ${contentBytes.length} >>\nstream\n${content.toString()}\nendstream',
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+      ];
+
+      final bytes = <int>[];
+      void addAscii(String text) => bytes.addAll(latin1.encode(text));
+      addAscii('%PDF-1.4\n');
+      final offsets = <int>[0];
+      for (int i = 0; i < objects.length; i++) {
+        offsets.add(bytes.length);
+        addAscii('${i + 1} 0 obj\n${objects[i]}\nendobj\n');
+      }
+      final xrefOffset = bytes.length;
+      addAscii('xref\n0 ${objects.length + 1}\n');
+      addAscii('0000000000 65535 f \n');
+      for (int i = 1; i < offsets.length; i++) {
+        addAscii('${offsets[i].toString().padLeft(10, '0')} 00000 n \n');
+      }
+      addAscii('trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF');
+
+      await file.writeAsBytes(bytes, flush: true);
+      await OpenFilex.open(file.path);
+      if (mounted) _showExportMessage('خروجی PDF مدیریتی ساخته شد.');
+    } catch (_) {
+      if (mounted) _showExportMessage('خطا در ساخت خروجی PDF');
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  String _reportTitleForFile() {
+    if (periodMode == ReportPeriodMode.currentMonth) return _monthName(selectedMonth);
+    return '${startDate.replaceAll('/', '-')}_تا_${endDate.replaceAll('/', '-')}';
+  }
+
+  void _showExportMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _exportButtons() {
+    return Card(
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('خروجی برای ارائه به مدیر', style: TextStyle(color: Color(0xFFC9A227), fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: OutlinedButton.icon(onPressed: exporting ? null : _exportPdf, icon: const Icon(Icons.picture_as_pdf), label: const Text('PDF'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: exporting ? null : _exportExcel, icon: const Icon(Icons.table_chart), label: const Text('Excel'))),
+              ],
+            ),
+            if (exporting) const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _citySummary() {
+    final groups = _cityGroups(_periodRecords);
+    if (groups.isEmpty) return const SizedBox.shrink();
+    final cities = groups.keys.toList()..sort((a, b) => groups[b]!.length.compareTo(groups[a]!.length));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text(
-          'آمار شهرها',
-          style: TextStyle(
-            color: Color(0xFFC9A227),
-            fontSize: 21,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
+        const Text('آمار شهرها', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
         ...cities.map((city) {
-          final cityRecords = groups[city]!;
-          final problems = _problemCount(cityRecords);
-          final percent = _problemPercent(cityRecords);
-
+          final data = groups[city]!;
           return Card(
             color: const Color(0xFF101B2E),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_city,
-                        color: Color(0xFFC9A227),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          city,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text('تعداد بازرسی: ${cityRecords.length}'),
-                  const SizedBox(height: 4),
-                  Text('تعداد مشکلات: $problems'),
-                  const SizedBox(height: 4),
-                  Text(
-                    'درصد مشکل: ${percent.toStringAsFixed(1)}٪',
-                    style: const TextStyle(
-                      color: Color(0xFFC9A227),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
+            child: ListTile(
+              leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
+              title: Text(city),
+              subtitle: Text('بازرسی: ${_toPersian('${data.length}')}  •  مشکل: ${_toPersian('${_problemCount(data)}')}  •  درصد: ${_toPersian(_problemPercent(data).toStringAsFixed(1))}٪'),
             ),
           );
         }),
@@ -3114,13 +3276,9 @@ class _ReportsPageState extends State<ReportsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('آمار و گزارش‌ها'),
-      ),
+      appBar: AppBar(title: const Text('آمار و گزارش‌ها')),
       body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadInspections,
               child: ListView(
@@ -3131,26 +3289,18 @@ class _ReportsPageState extends State<ReportsPage> {
                       color: Color(0xFF101B2E),
                       child: Padding(
                         padding: EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.bar_chart,
-                              size: 64,
-                              color: Color(0xFFC9A227),
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'هنوز هیچ بازرسی‌ای ثبت نشده است.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+                        child: Text('هنوز هیچ بازرسی‌ای ثبت نشده است.', textAlign: TextAlign.center),
                       ),
                     )
                   else ...[
-                    _dailyReport(),
-                    _monthlyReport(),
-                    _cityReport(),
+                    _periodSelector(),
+                    _periodDetails(),
+                    _summary(),
+                    _citySelectors(),
+                    _cityComparison(),
+                    _citySummary(),
+                    const SizedBox(height: 8),
+                    _exportButtons(),
                   ],
                 ],
               ),
@@ -3158,7 +3308,6 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 }
-
 
 class SettingsPage
     extends StatelessWidget {
