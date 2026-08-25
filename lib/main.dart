@@ -1335,7 +1335,7 @@ class _ArchivePageState extends State<ArchivePage> {
           ),
           IconButton(
             tooltip: 'جستجو با تاریخ',
-            icon: const Icon(Icons.event_search),
+            icon: const Icon(Icons.search),
             onPressed: () {
               Navigator.push(
                 context,
