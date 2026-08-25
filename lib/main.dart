@@ -3102,6 +3102,60 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
+  String _reportTitleForFile() {
+    if (periodMode == ReportPeriodMode.currentMonth) {
+      return _monthName(selectedMonth);
+    }
+    return '${_toPersian(startDate)} تا ${_toPersian(endDate)}';
+  }
+
+  void _showExportMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Widget _summary() {
+    final records = _periodRecords;
+    final problems = _problemCount(records);
+    final noProblems = records.length - problems;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        const Text(
+          'خلاصه گزارش',
+          style: TextStyle(
+            color: Color(0xFFC9A227),
+            fontSize: 21,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        _statCard(
+          title: 'کل بازرسی‌ها',
+          value: _toPersian('${records.length}'),
+          icon: Icons.assignment_turned_in,
+        ),
+        _statCard(
+          title: 'بازرسی‌های دارای مشکل',
+          value: _toPersian('$problems'),
+          icon: Icons.warning_amber_rounded,
+        ),
+        _statCard(
+          title: 'بازرسی‌های بدون مشکل',
+          value: _toPersian('$noProblems'),
+          icon: Icons.check_circle_outline,
+        ),
+        _statCard(
+          title: 'درصد بازرسی‌های دارای مشکل',
+          value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪',
+          icon: Icons.percent,
+        ),
+      ],
+    );
+  }
+
   Future<void> _exportExcel() async {
     if (exporting) return;
     setState(() => exporting = true);
