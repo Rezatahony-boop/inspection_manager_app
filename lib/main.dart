@@ -8,6 +8,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:excel/excel.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 void main() {
   runApp(const InspectionManagerApp());
@@ -2624,8 +2627,7 @@ class _ReportsPageState extends State<ReportsPage> {
   String selectedMonth = '';
   String startDate = '';
   String endDate = '';
-  String? cityOne;
-  String? cityTwo;
+  final Set<String> selectedCities = <String>{};
   bool exporting = false;
 
   @override
@@ -2740,22 +2742,10 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   void _ensureCities() {
-    final cities = _cities;
-    if (cities.isEmpty) {
-      cityOne = null;
-      cityTwo = null;
-      return;
-    }
-    cityOne ??= cities.first;
-    if (cityTwo == null && cities.length > 1) {
-      cityTwo = cities[1];
-    }
-    if (!cities.contains(cityOne)) cityOne = cities.first;
-    if (cityTwo != null && !cities.contains(cityTwo)) {
-      cityTwo = cities.length > 1 ? cities[1] : null;
-    }
-    if (cityTwo == cityOne && cities.length > 1) {
-      cityTwo = cities.firstWhere((c) => c != cityOne);
+    final cities = _cities.toSet();
+    selectedCities.removeWhere((c) => !cities.contains(c));
+    if (selectedCities.isEmpty && cities.isNotEmpty) {
+      selectedCities.addAll(cities);
     }
   }
 
@@ -3019,101 +3009,95 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _citySelectors() {
     final cities = _cities;
-    if (cities.isEmpty) {
-      return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('برای مقایسه شهرها هنوز شهری ثبت نشده است.')));
-    }
-    _ensureCities();
+    if (cities.isEmpty) return const SizedBox.shrink();
     return Card(
       color: const Color(0xFF101B2E),
+      margin: const EdgeInsets.only(top: 20),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('انتخاب دو شهر برای مقایسه', style: TextStyle(color: Color(0xFFC9A227), fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: _cityDropdown('شهر اول', cityOne, (v) => setState(() { cityOne = v; if (cityTwo == cityOne && cities.length > 1) cityTwo = cities.firstWhere((c) => c != cityOne); }))),
-                const SizedBox(width: 8),
-                Expanded(child: _cityDropdown('شهر دوم', cityTwo, (v) => setState(() { cityTwo = v; if (cityTwo == cityOne && cities.length > 1) cityOne = cities.firstWhere((c) => c != cityTwo); }))),
-              ],
-            ),
-          ],
-        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('انتخاب شهرها برای مقایسه', style: TextStyle(color: Color(0xFFC9A227), fontSize: 19, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('${_toPersian('${selectedCities.length}')} شهر انتخاب شده'),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('انتخاب همه شهرها'),
+            value: selectedCities.length == cities.length,
+            tristate: selectedCities.isNotEmpty && selectedCities.length < cities.length,
+            onChanged: (v) => setState(() { if (v == true) selectedCities.addAll(cities); else selectedCities.clear(); }),
+          ),
+          const Divider(),
+          ...cities.map((city) => CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(city),
+            value: selectedCities.contains(city),
+            onChanged: (v) => setState(() { if (v == true) selectedCities.add(city); else selectedCities.remove(city); }),
+          )),
+        ]),
       ),
     );
   }
 
-  Widget _cityDropdown(String label, String? value, ValueChanged<String?> onChanged) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-      items: _cities.map((city) => DropdownMenuItem(value: city, child: Text(city, overflow: TextOverflow.ellipsis))).toList(),
-      onChanged: onChanged,
-    );
-  }
-
-  Widget _summary() {
-    final records = _periodRecords;
-    final problems = _problemCount(records);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('خلاصه گزارش', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
-        _statCard(title: 'کل بازرسی‌ها', value: _toPersian('${records.length}'), icon: Icons.assignment_turned_in),
-        _statCard(title: 'بازرسی‌های دارای مشکل', value: _toPersian('$problems'), icon: Icons.warning_amber_rounded),
-        _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('${records.length - problems}'), icon: Icons.check_circle_outline),
-        _statCard(title: 'درصد مشکلات', value: '${_toPersian(_problemPercent(records).toStringAsFixed(1))}٪', icon: Icons.percent),
-      ],
-    );
-  }
-
   Widget _cityComparison() {
-    final first = _cityRecords(cityOne);
-    final second = _cityRecords(cityTwo);
-    if (cityOne == null || cityTwo == null) {
-      return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('برای نمودار، دو شهر انتخاب کنید.')));
+    final groups = <String, List<Inspection>>{};
+    for (final city in selectedCities) {
+      final data = _cityRecords(city);
+      if (data.isNotEmpty) groups[city] = data;
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 20),
-        const Text('مقایسه دو شهر', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        _comparisonBar('تعداد بازرسی', first.length.toDouble(), second.length.toDouble(), cityOne!, cityTwo!, integer: true),
-        _comparisonBar('تعداد مشکلات', _problemCount(first).toDouble(), _problemCount(second).toDouble(), cityOne!, cityTwo!, integer: true),
-        _comparisonBar('درصد مشکلات', _problemPercent(first), _problemPercent(second), cityOne!, cityTwo!, percentage: true),
-      ],
-    );
+    if (groups.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 20),
+      const Text('مقایسه شهرهای انتخاب‌شده', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10),
+      _multiChart('تعداد بازرسی', groups, (r) => r.length.toDouble(), 1),
+      _multiChart('تعداد مشکلات', groups, (r) => _problemCount(r).toDouble(), 1),
+      _multiChart('درصد بازرسی‌های دارای مشکل', groups, _problemPercent, 100),
+    ]);
   }
 
-  Widget _comparisonBar(String title, double first, double second, String firstName, String secondName, {bool percentage = false, bool integer = false}) {
-    final maxValue = [first, second, 1.0].reduce((a, b) => a > b ? a : b);
-    String format(double value) {
-      if (percentage) return '${_toPersian(value.toStringAsFixed(1))}٪';
-      if (integer) return _toPersian(value.round().toString());
-      return _toPersian(value.toStringAsFixed(1));
-    }
+  Widget _multiChart(String title, Map<String, List<Inspection>> groups, double Function(List<Inspection>) valueOf, double fixedMax) {
+    final maxValue = fixedMax == 1 ? groups.values.map(valueOf).fold<double>(1, (a,b) => a>b?a:b) : fixedMax;
     return Card(
       color: const Color(0xFF101B2E),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Text('$firstName: ${format(first)}'),
-            const SizedBox(height: 4),
-            LinearProgressIndicator(value: (first / maxValue).clamp(0, 1).toDouble()),
-            const SizedBox(height: 12),
-            Text('$secondName: ${format(second)}'),
-            const SizedBox(height: 4),
-            LinearProgressIndicator(value: (second / maxValue).clamp(0, 1).toDouble()),
-          ],
-        ),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        ...groups.entries.map((e) {
+          final value = valueOf(e.value).clamp(0, maxValue).toDouble();
+          final ratio = maxValue <= 0 ? 0.0 : (value/maxValue).clamp(0,1).toDouble();
+          final shown = fixedMax == 100 ? '${_toPersian(value.toStringAsFixed(1))}٪' : _toPersian(value.round().toString());
+          return Padding(padding: const EdgeInsets.only(bottom: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [Expanded(child: Text(e.key)), Text(shown, style: const TextStyle(color: Color(0xFFC9A227), fontWeight: FontWeight.bold))]),
+            const SizedBox(height: 5),
+            LinearProgressIndicator(value: ratio),
+          ]));
+        }),
+      ])),
+    );
+  }
+
+  Map<String, List<Inspection>> _repeatedGroupsForPeriod() {
+    final groups = <String, List<Inspection>>{};
+    for (final item in _periodRecords) {
+      final code = item.agentCode.trim();
+      if (code.isNotEmpty) groups.putIfAbsent(code, () => []).add(item);
+    }
+    groups.removeWhere((k,v) => v.length < 2);
+    return groups;
+  }
+
+  Widget _repeatedCard() {
+    final groups = _repeatedGroupsForPeriod();
+    return Card(
+      color: const Color(0xFF101B2E),
+      margin: const EdgeInsets.only(top: 20),
+      child: ListTile(
+        leading: const Icon(Icons.repeat, color: Color(0xFFC9A227), size: 32),
+        title: const Text('بازرسی‌های تکراری'),
+        subtitle: Text(groups.isEmpty ? 'مورد تکراری در این بازه پیدا نشد.' : '${_toPersian('${groups.length}')} کد عامل تکراری است.'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RepeatedInspectionsPage(inspections: inspections))),
       ),
     );
   }
@@ -3122,107 +3106,74 @@ class _ReportsPageState extends State<ReportsPage> {
     if (exporting) return;
     setState(() => exporting = true);
     try {
-      final directory = await getApplicationDocumentsDirectory();
+      final excel = Excel.createExcel();
       final records = _periodRecords;
-      final stamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${directory.path}/گزارش_بازرسی_$stamp.xls');
-      String esc(String value) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
-      final rows = StringBuffer();
-      rows.writeln('<Row><Cell><Data ss:Type="String">تاریخ</Data></Cell><Cell><Data ss:Type="String">کد عامل</Data></Cell><Cell><Data ss:Type="String">نام عامل</Data></Cell><Cell><Data ss:Type="String">شهر</Data></Cell><Cell><Data ss:Type="String">مشکل</Data></Cell></Row>');
-      for (final item in records) {
-        rows.writeln('<Row><Cell><Data ss:Type="String">${esc(item.date)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.agentCode)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.agentName)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.city)}</Data></Cell><Cell><Data ss:Type="String">${esc(item.problems.isEmpty ? 'خیر' : 'بله')}</Data></Cell></Row>');
+      final summary = excel['خلاصه گزارش'];
+      summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
+      summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue(_reportTitleForFile())]);
+      summary.appendRow([TextCellValue('کل بازرسی‌ها'), IntCellValue(records.length)]);
+      summary.appendRow([TextCellValue('دارای مشکل'), IntCellValue(_problemCount(records))]);
+      summary.appendRow([TextCellValue('بدون مشکل'), IntCellValue(records.length-_problemCount(records))]);
+      summary.appendRow([TextCellValue('درصد دارای مشکل'), DoubleCellValue(_problemPercent(records))]);
+      final citySheet = excel['مقایسه شهرها'];
+      citySheet.appendRow([TextCellValue('شهر'),TextCellValue('بازرسی'),TextCellValue('مشکل'),TextCellValue('درصد مشکل')]);
+      final groups = _cityGroups(records);
+      final cities = selectedCities.isEmpty ? (groups.keys.toList()..sort()) : (selectedCities.toList()..sort());
+      for (final city in cities) {
+        final data=groups[city] ?? <Inspection>[];
+        citySheet.appendRow([TextCellValue(city),IntCellValue(data.length),IntCellValue(_problemCount(data)),DoubleCellValue(_problemPercent(data))]);
       }
-      final xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Worksheet ss:Name="گزارش بازرسی"><Table>${rows.toString()}</Table></Worksheet></Workbook>''';
-      await file.writeAsString(xml, encoding: utf8);
-      await OpenFilex.open(file.path);
-      if (mounted) _showExportMessage('خروجی Excel آماده شد.');
-    } catch (_) {
-      if (mounted) _showExportMessage('خطا در ساخت خروجی Excel');
-    } finally {
-      if (mounted) setState(() => exporting = false);
-    }
+      final details = excel['جزئیات بازرسی‌ها'];
+      details.appendRow([TextCellValue('تاریخ'),TextCellValue('کد عامل'),TextCellValue('نام عامل'),TextCellValue('شهر'),TextCellValue('شرح مشکلات')]);
+      for (final item in records) {
+        details.appendRow([TextCellValue(item.date),TextCellValue(item.agentCode),TextCellValue(item.agentName),TextCellValue(item.city),TextCellValue(item.problems.isEmpty?'بدون مشکل':item.problems)]);
+      }
+      final repeated = excel['بازرسی‌های تکراری'];
+      repeated.appendRow([TextCellValue('کد عامل'),TextCellValue('تعداد تکرار')]);
+      for (final e in _repeatedGroupsForPeriod().entries) { repeated.appendRow([TextCellValue(e.key),IntCellValue(e.value.length)]); }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+      await file.writeAsBytes(bytes, flush:true);
+      final result = await OpenFilex.open(file.path);
+      if (mounted) _showExportMessage(result.type == ResultType.done ? 'فایل Excel با موفقیت ساخته شد.' : 'فایل Excel ساخته شد؛ برنامه Excel برای باز کردن آن پیدا نشد.');
+    } catch (e) {
+      if (mounted) _showExportMessage('خطا در ساخت Excel: $e');
+    } finally { if (mounted) setState(() => exporting=false); }
   }
 
   Future<void> _exportPdf() async {
     if (exporting) return;
     setState(() => exporting = true);
     try {
+      final doc = pw.Document();
       final records = _periodRecords;
-      final directory = await getApplicationDocumentsDirectory();
-      final stamp = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${directory.path}/گزارش_مدیریتی_$stamp.pdf');
-
-      String pdfSafe(String value) => value.codeUnits.map((c) => c >= 32 && c <= 126 ? String.fromCharCode(c) : '?').join();
-      final reportLines = <String>[
-        'Inspection Management Report',
-        'Period: ${pdfSafe(_reportTitleForFile())}',
-        'Total inspections: ${records.length}',
-        'Inspections with problems: ${_problemCount(records)}',
-        'Inspections without problems: ${records.length - _problemCount(records)}',
-        'Problem percentage: ${_problemPercent(records).toStringAsFixed(1)}%',
-        'City 1: ${pdfSafe(cityOne ?? '-')}',
-        'City 1 inspections: ${_cityRecords(cityOne).length}',
-        'City 1 problems: ${_problemCount(_cityRecords(cityOne))}',
-        'City 1 problem percentage: ${_problemPercent(_cityRecords(cityOne)).toStringAsFixed(1)}%',
-        'City 2: ${pdfSafe(cityTwo ?? '-')}',
-        'City 2 inspections: ${_cityRecords(cityTwo).length}',
-        'City 2 problems: ${_problemCount(_cityRecords(cityTwo))}',
-        'City 2 problem percentage: ${_problemPercent(_cityRecords(cityTwo)).toStringAsFixed(1)}%',
-      ];
-
-      String pdfEscape(String value) => value.replaceAll(r'\', r'\\').replaceAll('(', r'\(').replaceAll(')', r'\)');
-      final content = StringBuffer('BT\n/F1 13 Tf\n50 790 Td\n');
-      for (int i = 0; i < reportLines.length; i++) {
-        if (i > 0) content.write('0 -28 Td\n');
-        content.write('(${pdfEscape(reportLines[i])}) Tj\n');
-      }
-      content.write('ET');
-      final contentBytes = utf8.encode(content.toString());
-
-      final objects = <String>[
-        '<< /Type /Catalog /Pages 2 0 R >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-        '<< /Length ${contentBytes.length} >>\nstream\n${content.toString()}\nendstream',
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
-      ];
-
-      final bytes = <int>[];
-      void addAscii(String text) => bytes.addAll(latin1.encode(text));
-      addAscii('%PDF-1.4\n');
-      final offsets = <int>[0];
-      for (int i = 0; i < objects.length; i++) {
-        offsets.add(bytes.length);
-        addAscii('${i + 1} 0 obj\n${objects[i]}\nendobj\n');
-      }
-      final xrefOffset = bytes.length;
-      addAscii('xref\n0 ${objects.length + 1}\n');
-      addAscii('0000000000 65535 f \n');
-      for (int i = 1; i < offsets.length; i++) {
-        addAscii('${offsets[i].toString().padLeft(10, '0')} 00000 n \n');
-      }
-      addAscii('trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n$xrefOffset\n%%EOF');
-
-      await file.writeAsBytes(bytes, flush: true);
-      await OpenFilex.open(file.path);
-      if (mounted) _showExportMessage('خروجی PDF مدیریتی ساخته شد.');
-    } catch (_) {
-      if (mounted) _showExportMessage('خطا در ساخت خروجی PDF');
-    } finally {
-      if (mounted) setState(() => exporting = false);
-    }
-  }
-
-  String _reportTitleForFile() {
-    if (periodMode == ReportPeriodMode.currentMonth) return _monthName(selectedMonth);
-    return '${startDate.replaceAll('/', '-')}_تا_${endDate.replaceAll('/', '-')}';
-  }
-
-  void _showExportMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      final groups = _cityGroups(records);
+      final cities = selectedCities.isEmpty ? (groups.keys.toList()..sort()) : (selectedCities.toList()..sort());
+      doc.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, build: (_) => [
+        pw.Text('Inspection Management Report', style: pw.TextStyle(fontSize:20,fontWeight:pw.FontWeight.bold)),
+        pw.SizedBox(height:10),
+        pw.Text('Report period: ${_reportTitleForFile()}'),
+        pw.Text('Total inspections: ${records.length}'),
+        pw.Text('Inspections with problems: ${_problemCount(records)}'),
+        pw.Text('Problem percentage: ${_problemPercent(records).toStringAsFixed(1)}%'),
+        pw.SizedBox(height:15),
+        pw.Text('Selected cities'),
+        if (cities.isNotEmpty) pw.Table.fromTextArray(headers:['City','Inspections','Problems','Problem %'], data:cities.map((city){final d=groups[city]??<Inspection>[];return [city,'${d.length}','${_problemCount(d)}','${_problemPercent(d).toStringAsFixed(1)}%'];}).toList()),
+        pw.SizedBox(height:15),
+        pw.Text('Inspection details'),
+        if (records.isNotEmpty) pw.Table.fromTextArray(headers:['Date','Agent code','Agent name','City','Problem'],data:records.map((x)=>[x.date,x.agentCode,x.agentName,x.city,x.problems.isEmpty?'No':x.problems]).toList(),cellStyle:const pw.TextStyle(fontSize:7)),
+      ]));
+      final bytes=await doc.save();
+      if(bytes.isEmpty) throw Exception('PDF file is empty');
+      final dir=await getApplicationDocumentsDirectory();
+      final file=File('${dir.path}/گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await file.writeAsBytes(bytes,flush:true);
+      final result=await OpenFilex.open(file.path);
+      if(mounted) _showExportMessage(result.type==ResultType.done?'PDF با موفقیت ساخته شد.':'PDF ساخته شد؛ برنامه PDF برای باز کردن آن پیدا نشد.');
+    } catch(e) { if(mounted) _showExportMessage('خطا در ساخت PDF: $e'); }
+    finally { if(mounted) setState(()=>exporting=false); }
   }
 
   Widget _exportButtons() {
@@ -3299,6 +3250,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     _citySelectors(),
                     _cityComparison(),
                     _citySummary(),
+                    _repeatedCard(),
                     const SizedBox(height: 8),
                     _exportButtons(),
                   ],
