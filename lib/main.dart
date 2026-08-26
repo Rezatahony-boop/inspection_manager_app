@@ -8,7 +8,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' as excel;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -3565,48 +3565,48 @@ class _ReportsPageState extends State<ReportsPage> {
     if (exporting) return;
     setState(() => exporting = true);
     try {
-      final excel = Excel.createExcel();
+      final excelFile = excel.Excel.createExcel();
       final records = _periodRecords;
-      final summary = excel['خلاصه گزارش'];
-      summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
-      summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue(_reportTitleForFile())]);
-      summary.appendRow([TextCellValue('کل بازرسی‌ها'), IntCellValue(records.length)]);
-      summary.appendRow([TextCellValue('دارای مشکل'), IntCellValue(_problemCount(records))]);
-      summary.appendRow([TextCellValue('بدون مشکل'), IntCellValue(records.length-_problemCount(records))]);
-      summary.appendRow([TextCellValue('درصد دارای مشکل'), DoubleCellValue(_problemPercent(records))]);
-      summary.appendRow([TextCellValue('')]);
-      summary.appendRow([TextCellValue('نام عامل'), TextCellValue('کد عامل'), TextCellValue('تاریخ بازرسی')]);
+      final summary = excelFile['خلاصه گزارش'];
+      summary.appendRow([excel.TextCellValue('سامانه مدیریت بازرسی'), excel.TextCellValue('')]);
+      summary.appendRow([excel.TextCellValue('بازه گزارش'), excel.TextCellValue(_reportTitleForFile())]);
+      summary.appendRow([excel.TextCellValue('کل بازرسی‌ها'), excel.IntCellValue(records.length)]);
+      summary.appendRow([excel.TextCellValue('دارای مشکل'), excel.IntCellValue(_problemCount(records))]);
+      summary.appendRow([excel.TextCellValue('بدون مشکل'), excel.IntCellValue(records.length-_problemCount(records))]);
+      summary.appendRow([excel.TextCellValue('درصد دارای مشکل'), excel.DoubleCellValue(_problemPercent(records))]);
+      summary.appendRow([excel.TextCellValue('')]);
+      summary.appendRow([excel.TextCellValue('نام عامل'), excel.TextCellValue('کد عامل'), excel.TextCellValue('تاریخ بازرسی')]);
       for (final item in records) {
-        summary.appendRow([TextCellValue(item.agentName), TextCellValue(item.agentCode), TextCellValue(item.date)]);
+        summary.appendRow([excel.TextCellValue(item.agentName), excel.TextCellValue(item.agentCode), excel.TextCellValue(item.date)]);
       }
-      final citySheet = excel['مقایسه شهرها'];
-      citySheet.appendRow([TextCellValue('شهر'),TextCellValue('بازرسی'),TextCellValue('مشکل'),TextCellValue('درصد مشکل')]);
+      final citySheet = excelFile['مقایسه شهرها'];
+      citySheet.appendRow([excel.TextCellValue('شهر'),excel.TextCellValue('بازرسی'),excel.TextCellValue('مشکل'),excel.TextCellValue('درصد مشکل')]);
       final groups = _cityGroups(records);
       final cities = selectedCities.isEmpty ? (groups.keys.toList()..sort()) : (selectedCities.toList()..sort());
       for (final city in cities) {
         final data=groups[city] ?? <Inspection>[];
-        citySheet.appendRow([TextCellValue(city),IntCellValue(data.length),IntCellValue(_problemCount(data)),DoubleCellValue(_problemPercent(data))]);
+        citySheet.appendRow([excel.TextCellValue(city),excel.IntCellValue(data.length),excel.IntCellValue(_problemCount(data)),excel.DoubleCellValue(_problemPercent(data))]);
       }
-      final details = excel['جزئیات بازرسی‌ها'];
-      details.appendRow([TextCellValue('تاریخ'),TextCellValue('کد عامل'),TextCellValue('نام عامل'),TextCellValue('شهر'),TextCellValue('شرح مشکلات')]);
+      final details = excelFile['جزئیات بازرسی‌ها'];
+      details.appendRow([excel.TextCellValue('تاریخ'),excel.TextCellValue('کد عامل'),excel.TextCellValue('نام عامل'),excel.TextCellValue('شهر'),excel.TextCellValue('شرح مشکلات')]);
       for (final item in records) {
-        details.appendRow([TextCellValue(item.date),TextCellValue(item.agentCode),TextCellValue(item.agentName),TextCellValue(item.city),TextCellValue(item.problems.isEmpty?'بدون مشکل':item.problems)]);
+        details.appendRow([excel.TextCellValue(item.date),excel.TextCellValue(item.agentCode),excel.TextCellValue(item.agentName),excel.TextCellValue(item.city),excel.TextCellValue(item.problems.isEmpty?'بدون مشکل':item.problems)]);
       }
-      final repeated = excel['بازرسی‌های تکراری'];
+      final repeated = excelFile['بازرسی‌های تکراری'];
       repeated.appendRow([
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('تعداد بازرسی'),
-        TextCellValue('تاریخ‌های بازرسی'),
+        excel.TextCellValue('کد عامل'),
+        excel.TextCellValue('نام عامل'),
+        excel.TextCellValue('تعداد بازرسی'),
+        excel.TextCellValue('تاریخ‌های بازرسی'),
       ]);
       for (final e in _repeatedGroupsForPeriod().entries) {
         final dates = [...e.value.map((x) => x.date)]..sort((a, b) => _dateKey(a).compareTo(_dateKey(b)));
         final name = e.value.first.agentName;
         repeated.appendRow([
-          TextCellValue(e.key),
-          TextCellValue(name),
-          IntCellValue(e.value.length),
-          TextCellValue(dates.join(' ، ')),
+          excel.TextCellValue(e.key),
+          excel.TextCellValue(name),
+          excel.IntCellValue(e.value.length),
+          excel.TextCellValue(dates.join(' ، ')),
         ]);
       }
       final bytes = excel.save();
@@ -3757,17 +3757,17 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
     if (exporting || problems.isEmpty) return;
     setState(() => exporting = true);
     try {
-      final excel = Excel.createExcel();
-      final sheet = excel['بازرسی‌های دارای مشکل'];
-      sheet.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('تعداد مستندات')]);
+      final excelFile = excel.Excel.createExcel();
+      final sheet = excelFile['بازرسی‌های دارای مشکل'];
+      sheet.appendRow([excel.TextCellValue('تاریخ'), excel.TextCellValue('کد عامل'), excel.TextCellValue('نام عامل'), excel.TextCellValue('شهر'), excel.TextCellValue('شرح مشکلات'), excel.TextCellValue('تعداد مستندات')]);
       for (final item in problems) {
         sheet.appendRow([
-          TextCellValue(item.date),
-          TextCellValue(item.agentCode),
-          TextCellValue(item.agentName),
-          TextCellValue(item.city),
-          TextCellValue(item.problems),
-          IntCellValue(item.evidences.length),
+          excel.TextCellValue(item.date),
+          excel.TextCellValue(item.agentCode),
+          excel.TextCellValue(item.agentName),
+          excel.TextCellValue(item.city),
+          excel.TextCellValue(item.problems),
+          excel.IntCellValue(item.evidences.length),
         ]);
       }
       final agents = <String, Inspection>{};
@@ -3775,12 +3775,12 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
         final code = item.agentCode.trim();
         if (code.isNotEmpty) agents[code] = item;
       }
-      final agentSheet = excel['عامل‌های دارای مشکل'];
-      agentSheet.appendRow([TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('تعداد موارد مشکل')]);
+      final agentSheet = excelFile['عامل‌های دارای مشکل'];
+      agentSheet.appendRow([excel.TextCellValue('کد عامل'), excel.TextCellValue('نام عامل'), excel.TextCellValue('شهر'), excel.TextCellValue('تعداد موارد مشکل')]);
       final counts = <String, int>{};
       for (final item in problems) counts[item.agentCode.trim()] = (counts[item.agentCode.trim()] ?? 0) + 1;
       for (final e in agents.entries) {
-        agentSheet.appendRow([TextCellValue(e.key), TextCellValue(e.value.agentName), TextCellValue(e.value.city), IntCellValue(counts[e.key] ?? 0)]);
+        agentSheet.appendRow([excel.TextCellValue(e.key), excel.TextCellValue(e.value.agentName), excel.TextCellValue(e.value.city), excel.IntCellValue(counts[e.key] ?? 0)]);
       }
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
