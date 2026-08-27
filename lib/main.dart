@@ -8,7 +8,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' show Excel, TextCellValue, IntCellValue, DoubleCellValue;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -3609,7 +3609,7 @@ class _ReportsPageState extends State<ReportsPage> {
           TextCellValue(dates.join(' ، ')),
         ]);
       }
-      final bytes = excel.save();
+      final bytes = excel.encode();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
       final dir = await getExportDirectory();
       final file = File('${dir.path}/گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.xlsx');
@@ -3782,7 +3782,7 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
       for (final e in agents.entries) {
         agentSheet.appendRow([TextCellValue(e.key), TextCellValue(e.value.agentName), TextCellValue(e.value.city), IntCellValue(counts[e.key] ?? 0)]);
       }
-      final bytes = excel.save();
+      final bytes = excel.encode();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
       final dir = await getExportDirectory();
       final file = File('${dir.path}/بازرسی_های_دارای_مشکل_${DateTime.now().millisecondsSinceEpoch}.xlsx');
