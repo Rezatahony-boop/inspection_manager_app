@@ -2494,7 +2494,7 @@ class _SearchArchivePageState
       return [];
     }
 
-    return inspections
+    return widget.inspections
         .where(
           (item) =>
               item.agentCode
@@ -2518,9 +2518,7 @@ class _SearchArchivePageState
         title:
             const Text('جستجوی بایگانی'),
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+      body: Column(
         children: [
           Padding(
             padding:
