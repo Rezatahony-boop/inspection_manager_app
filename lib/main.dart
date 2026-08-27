@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -219,7 +220,11 @@ class Inspection {
     }
 
     return Inspection(
-      id: json['id']?.toString() ?? '',
+      id: (json['id']?.toString().trim().isNotEmpty ?? false)
+          ? json['id'].toString()
+          : 'legacy_${base64Url.encode(utf8.encode(
+              '${json['date'] ?? ''}|${json['agentCode'] ?? ''}|${json['agentName'] ?? ''}|${json['city'] ?? ''}|${json['problems'] ?? ''}',
+            ))}',
       date: json['date']?.toString() ?? '',
       agentCode: json['agentCode']?.toString() ?? '',
       agentName: json['agentName']?.toString() ?? '',
@@ -331,25 +336,21 @@ class AppStorage {
 // پوشه مستندات
 // =====================================================
 
-Future<Directory> getExportDirectory() async {
-  // اولویت با پوشه Download حافظه عمومی گوشی است تا فایل برای کاربر قابل دسترسی باشد.
-  final publicDownload = Directory('/storage/emulated/0/Download');
-  try {
-    if (!await publicDownload.exists()) {
-      await publicDownload.create(recursive: true);
-    }
-    return publicDownload;
-  } catch (_) {
-    // در صورت محدودیت دسترسی اندروید، از فضای خارجی اختصاصی برنامه استفاده می‌کنیم.
-    final external = await getExternalStorageDirectory();
-    if (external != null) {
-      final folder = Directory('${external.path}/InspectionManager');
-      if (!await folder.exists()) await folder.create(recursive: true);
-      return folder;
-    }
-    final fallback = await getApplicationDocumentsDirectory();
-    return fallback;
-  }
+Future<String?> saveExportFileToPhone({
+  required List<int> bytes,
+  required String fileName,
+}) async {
+  // در اندرویدهای جدید نوشتن مستقیم در /storage/emulated/0/Download
+  // به علت Scoped Storage قابل اتکا نیست. FilePicker از Storage Access
+  // Framework خود اندروید استفاده می‌کند و فایل را واقعاً در حافظه قابل
+  // دسترس کاربر ذخیره می‌کند.
+  final path = await FilePicker.platform.saveFile(
+    dialogTitle: 'ذخیره فایل خروجی',
+    fileName: fileName,
+    initialDirectory: '/storage/emulated/0/Download',
+    bytes: Uint8List.fromList(bytes),
+  );
+  return path;
 }
 
 Future<Directory> getEvidenceDirectory() async {
@@ -1415,8 +1416,8 @@ class _ArchivePageState extends State<ArchivePage> {
                         ),
                         subtitle: Text('$count بازرسی'),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => MonthArchivePage(
@@ -1426,6 +1427,7 @@ class _ArchivePageState extends State<ArchivePage> {
                               ),
                             ),
                           );
+                          await load();
                         },
                       ),
                     );
@@ -1439,7 +1441,7 @@ class _ArchivePageState extends State<ArchivePage> {
 // بایگانی یک ماه
 // =====================================================
 
-class MonthArchivePage extends StatelessWidget {
+class MonthArchivePage extends StatefulWidget {
   final String month;
   final String monthTitleText;
   final List<Inspection> inspections;
@@ -1450,6 +1452,29 @@ class MonthArchivePage extends StatelessWidget {
     required this.monthTitleText,
     required this.inspections,
   });
+
+  @override
+  State<MonthArchivePage> createState() => _MonthArchivePageState();
+}
+
+class _MonthArchivePageState extends State<MonthArchivePage> {
+  List<Inspection> inspections = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await AppStorage.getInspections();
+    if (!mounted) return;
+    setState(() {
+      inspections = data;
+      loading = false;
+    });
+  }
 
   String normalizeDigits(String value) {
     const persian = '۰۱۲۳۴۵۶۷۸۹';
@@ -1486,7 +1511,7 @@ class MonthArchivePage extends StatelessWidget {
 
   List<String> get dates {
     final result = inspections
-        .where((item) => getMonth(item.date) == month)
+        .where((item) => getMonth(item.date) == widget.month)
         .map((item) => item.date)
         .where((date) => date.isNotEmpty)
         .toSet()
@@ -1504,8 +1529,10 @@ class MonthArchivePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(monthTitleText)),
-      body: dates.isEmpty
+      appBar: AppBar(title: Text(widget.monthTitleText)),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : dates.isEmpty
           ? const Center(
               child: Text('در این ماه بازرسی‌ای ثبت نشده است'),
             )
@@ -1531,8 +1558,8 @@ class MonthArchivePage extends StatelessWidget {
                     ),
                     subtitle: Text('$date  •  $count بازرسی'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.push(
+                    onTap: () async {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => DailyArchivePage(
@@ -1541,6 +1568,7 @@ class MonthArchivePage extends StatelessWidget {
                           ),
                         ),
                       );
+                      await _load();
                     },
                   ),
                 );
@@ -1572,6 +1600,23 @@ class DailyArchivePage extends StatefulWidget {
 
 class _DailyArchivePageState extends State<DailyArchivePage> {
   final searchController = TextEditingController();
+  List<Inspection> inspections = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await AppStorage.getInspections();
+    if (!mounted) return;
+    setState(() {
+      inspections = data;
+      loading = false;
+    });
+  }
 
   String _normalizeDate(String value) {
     const p = '۰۱۲۳۴۵۶۷۸۹';
@@ -1587,7 +1632,7 @@ class _DailyArchivePageState extends State<DailyArchivePage> {
   }
 
   List<Inspection> get dailyInspections {
-    var result = widget.inspections.where((item) {
+    var result = inspections.where((item) {
       final sameDate = _normalizeDate(item.date) == _normalizeDate(widget.date);
       final sameCity = widget.city == null || item.city.trim() == widget.city!.trim();
       return sameDate && sameCity;
@@ -1615,6 +1660,7 @@ class _DailyArchivePageState extends State<DailyArchivePage> {
     return groups;
   }
 
+
   @override
   void dispose() {
     searchController.dispose();
@@ -1630,7 +1676,9 @@ class _DailyArchivePageState extends State<DailyArchivePage> {
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: Column(
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -1692,7 +1740,7 @@ class _DailyArchivePageState extends State<DailyArchivePage> {
                               context,
                               MaterialPageRoute(builder: (_) => InspectionDetailsPage(inspection: item)),
                             );
-                            setState(() {});
+                            await _load();
                           },
                         ),
                       );
@@ -2446,7 +2494,7 @@ class _SearchArchivePageState
       return [];
     }
 
-    return widget.inspections
+    return inspections
         .where(
           (item) =>
               item.agentCode
@@ -2470,7 +2518,9 @@ class _SearchArchivePageState
         title:
             const Text('جستجوی بایگانی'),
       ),
-      body: Column(
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
         children: [
           Padding(
             padding:
@@ -3527,36 +3577,6 @@ class _ReportsPageState extends State<ReportsPage> {
         ),
         _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('$noProblems'), icon: Icons.check_circle_outline),
         _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent),
-        const SizedBox(height: 10),
-        Card(
-          color: const Color(0xFF101B2E),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('بازه کل بازرسی‌های انجام‌شده', style: TextStyle(color: Color(0xFFC9A227), fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                if (records.isEmpty)
-                  const Text('در این بازه بازرسی‌ای ثبت نشده است.')
-                else
-                  ...records.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(border: Border.all(color: Colors.white12), borderRadius: BorderRadius.circular(10)),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('نام عامل: ${item.agentName.isEmpty ? 'ثبت نشده' : item.agentName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 3),
-                        Text('کد عامل: ${item.agentCode}'),
-                        Text('تاریخ بازرسی: ${item.date}'),
-                      ]),
-                    ),
-                  )),
-              ],
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -3611,11 +3631,14 @@ class _ReportsPageState extends State<ReportsPage> {
       }
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
-      final dir = await getExportDirectory();
-      final file = File('${dir.path}/گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.xlsx');
-      await file.writeAsBytes(bytes, flush:true);
-      final result = await OpenFilex.open(file.path);
-      if (mounted) _showExportMessage(result.type == ResultType.done ? 'فایل Excel با موفقیت ساخته شد.' : 'فایل Excel ساخته شد؛ برنامه Excel برای باز کردن آن پیدا نشد.');
+      final fileName = 'گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
+      if (savedPath == null || savedPath.isEmpty) {
+        _showExportMessage('ذخیره فایل لغو شد.');
+        return;
+      }
+      final result = await OpenFilex.open(savedPath);
+      if (mounted) _showExportMessage(result.type == ResultType.done ? 'فایل Excel در حافظه گوشی ذخیره شد.' : 'فایل Excel ذخیره شد.');
     } catch (e) {
       if (mounted) _showExportMessage('خطا در ساخت Excel: $e');
     } finally { if (mounted) setState(() => exporting=false); }
@@ -3645,11 +3668,14 @@ class _ReportsPageState extends State<ReportsPage> {
       ]));
       final bytes=await doc.save();
       if(bytes.isEmpty) throw Exception('PDF file is empty');
-      final dir=await getExportDirectory();
-      final file=File('${dir.path}/گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.pdf');
-      await file.writeAsBytes(bytes,flush:true);
-      final result=await OpenFilex.open(file.path);
-      if(mounted) _showExportMessage(result.type==ResultType.done?'PDF با موفقیت ساخته شد.':'PDF ساخته شد؛ برنامه PDF برای باز کردن آن پیدا نشد.');
+      final fileName='گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final savedPath=await saveExportFileToPhone(bytes: bytes, fileName: fileName);
+      if(savedPath==null || savedPath.isEmpty){
+        _showExportMessage('ذخیره فایل لغو شد.');
+        return;
+      }
+      final result=await OpenFilex.open(savedPath);
+      if(mounted) _showExportMessage(result.type==ResultType.done?'PDF در حافظه گوشی ذخیره شد.':'PDF ذخیره شد؛ برنامه PDF برای باز کردن آن پیدا نشد.');
     } catch(e) { if(mounted) _showExportMessage('خطا در ساخت PDF: $e'); }
     finally { if(mounted) setState(()=>exporting=false); }
   }
@@ -3784,10 +3810,13 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
       }
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
-      final dir = await getExportDirectory();
-      final file = File('${dir.path}/بازرسی_های_دارای_مشکل_${DateTime.now().millisecondsSinceEpoch}.xlsx');
-      await file.writeAsBytes(bytes, flush: true);
-      final result = await OpenFilex.open(file.path);
+      final fileName = 'بازرسی_های_دارای_مشکل_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
+      if (savedPath == null || savedPath.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره فایل لغو شد.')));
+        return;
+      }
+      final result = await OpenFilex.open(savedPath);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.type == ResultType.done ? 'خروجی Excel در حافظه گوشی ذخیره شد.' : 'خروجی Excel ذخیره شد.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
