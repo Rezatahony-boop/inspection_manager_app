@@ -58,6 +58,8 @@ String toPersianDigits(String text) {
   return text;
 }
 
+String toPersian(String value) => toPersianDigits(value);
+
 String gregorianToJalali(DateTime date) {
   int gy = date.year;
   int gm = date.month;
@@ -351,6 +353,24 @@ Future<String?> saveExportFileToPhone({
     bytes: Uint8List.fromList(bytes),
   );
   return path;
+}
+
+Future<Directory> getExportDirectory() async {
+  final publicDownload = Directory('/storage/emulated/0/Download');
+  try {
+    if (!await publicDownload.exists()) {
+      await publicDownload.create(recursive: true);
+    }
+    return publicDownload;
+  } catch (_) {
+    final external = await getExternalStorageDirectory();
+    if (external != null) {
+      final folder = Directory('${external.path}/InspectionManager');
+      if (!await folder.exists()) await folder.create(recursive: true);
+      return folder;
+    }
+    return getApplicationDocumentsDirectory();
+  }
 }
 
 Future<Directory> getEvidenceDirectory() async {
@@ -1831,21 +1851,21 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
               children: [
                 Expanded(child: DropdownButtonFormField<int>(
                   value: day,
-                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
+                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => day = v ?? day),
                   decoration: const InputDecoration(labelText: 'روز'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: DropdownButtonFormField<int>(
                   value: month,
-                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
+                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => month = v ?? month),
                   decoration: const InputDecoration(labelText: 'ماه'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: DropdownButtonFormField<int>(
                   value: year,
-                  items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
+                  items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => year = v ?? year),
                   decoration: const InputDecoration(labelText: 'سال'),
                 )),
@@ -3131,7 +3151,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                     items: List.generate(maxDay, (i) => i + 1)
                         .map((v) => DropdownMenuItem(
                               value: v,
-                              child: Text(toPersian('$v')),
+                              child: Text(toPersianDigits('$v')),
                             ))
                         .toList(),
                     onChanged: (v) => setDialogState(() => day = v ?? day),
@@ -3145,7 +3165,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                     items: List.generate(12, (i) => i + 1)
                         .map((v) => DropdownMenuItem(
                               value: v,
-                              child: Text(toPersian('$v')),
+                              child: Text(toPersianDigits('$v')),
                             ))
                         .toList(),
                     onChanged: (v) => setDialogState(() => month = v ?? month),
@@ -3159,7 +3179,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                     items: List.generate(21, (i) => year - 10 + i)
                         .map((v) => DropdownMenuItem(
                               value: v,
-                              child: Text(toPersian('$v')),
+                              child: Text(toPersianDigits('$v')),
                             ))
                         .toList(),
                     onChanged: (v) => setDialogState(() => year = v ?? year),
