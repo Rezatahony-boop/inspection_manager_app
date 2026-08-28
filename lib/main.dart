@@ -13,7 +13,9 @@ import 'package:excel/excel.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppSettings.load();
   runApp(const InspectionManagerApp());
 }
 
@@ -257,6 +259,87 @@ class Inspection {
 }
 
 // =====================================================
+// تنظیمات سراسری برنامه
+// =====================================================
+
+class AppSettings {
+  static const _nameKey = 'inspector_name';
+  static const _passwordKey = 'app_password';
+  static const _dateKey = 'configured_jalali_date';
+  static const _timeKey = 'configured_time';
+  static const _profileKey = 'profile_image_path';
+
+  static SharedPreferences? _prefs;
+  static String inspectorName = 'رضا طاحونی';
+  static String password = '1234';
+  static String configuredDate = '';
+  static String configuredTime = '';
+  static String profileImagePath = '';
+
+  static Future<void> load() async {
+    _prefs = await SharedPreferences.getInstance();
+    inspectorName = _prefs!.getString(_nameKey) ?? 'رضا طاحونی';
+    password = _prefs!.getString(_passwordKey) ?? '1234';
+    configuredDate = _prefs!.getString(_dateKey) ?? '';
+    configuredTime = _prefs!.getString(_timeKey) ?? '';
+    profileImagePath = _prefs!.getString(_profileKey) ?? '';
+  }
+
+  static Future<void> setInspectorName(String value) async {
+    inspectorName = value.trim().isEmpty ? 'رضا طاحونی' : value.trim();
+    await _prefs!.setString(_nameKey, inspectorName);
+  }
+
+  static Future<void> setPassword(String value) async {
+    password = value;
+    await _prefs!.setString(_passwordKey, value);
+  }
+
+  static Future<void> setDate(String value) async {
+    configuredDate = value;
+    await _prefs!.setString(_dateKey, value);
+  }
+
+  static Future<void> setTime(String value) async {
+    configuredTime = value;
+    await _prefs!.setString(_timeKey, value);
+  }
+
+  static Future<void> setProfileImagePath(String value) async {
+    profileImagePath = value;
+    await _prefs!.setString(_profileKey, value);
+  }
+
+  static String todayJalali() {
+    return configuredDate.isNotEmpty
+        ? configuredDate
+        : gregorianToJalali(DateTime.now());
+  }
+
+  static String currentTime() {
+    if (configuredTime.isNotEmpty) return configuredTime;
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  static Map<String, dynamic> exportSettings() => {
+        'inspectorName': inspectorName,
+        'password': password,
+        'configuredDate': configuredDate,
+        'configuredTime': configuredTime,
+        'profileImagePath': profileImagePath,
+      };
+
+  static Future<void> restoreSettings(Map<String, dynamic> data) async {
+    await setInspectorName(data['inspectorName']?.toString() ?? 'رضا طاحونی');
+    await setPassword(data['password']?.toString() ?? '1234');
+    await setDate(data['configuredDate']?.toString() ?? '');
+    await setTime(data['configuredTime']?.toString() ?? '');
+    await setProfileImagePath(data['profileImagePath']?.toString() ?? '');
+  }
+}
+
+// =====================================================
 // ذخیره اطلاعات
 // =====================================================
 
@@ -401,10 +484,8 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
-  Future<void> login() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedPassword = prefs.getString('app_password') ?? '1234';
-    if (passwordController.text == savedPassword) {
+  void login() {
+    if (passwordController.text == AppSettings.password) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -484,87 +565,80 @@ class _LoginPageState extends State<LoginPage> {
 // داشبورد
 // =====================================================
 
-class DashboardPage extends StatefulWidget {
+class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
-
-  @override
-  State<DashboardPage> createState() => _DashboardPageState();
-}
-
-class _DashboardPageState extends State<DashboardPage> {
-  String inspectorName = 'رضا طاحونی';
-  String profilePath = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadProfile();
-  }
-
-  Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      inspectorName = prefs.getString('inspector_name') ?? 'رضا طاحونی';
-      profilePath = prefs.getString('profile_image_path') ?? '';
-    });
-  }
-
-  Widget _profileAvatar() {
-    if (profilePath.isNotEmpty && File(profilePath).existsSync()) {
-      return CircleAvatar(radius: 28, backgroundImage: FileImage(File(profilePath)));
-    }
-    return const CircleAvatar(
-      radius: 28,
-      child: Icon(Icons.person, size: 32),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('داشبورد')),
-      body: Column(
+      appBar: AppBar(
+        title: const Text('داشبورد'),
+      ),
+      body: GridView.count(
+        padding: const EdgeInsets.all(16),
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
         children: [
-          InkWell(
-            onTap: () async {
-              await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
-              _loadProfile();
+          DashboardButton(
+            title: 'ثبت بازرسی جدید',
+            icon: Icons.assignment_add,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NewInspectionPage(),
+                ),
+              );
             },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Row(
-                children: [
-                  _profileAvatar(),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('بازرس', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                        Text(inspectorName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.edit, size: 20),
-                ],
-              ),
-            ),
           ),
-          Expanded(
-            child: GridView.count(
-              padding: const EdgeInsets.all(16),
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              children: [
-                DashboardButton(title: 'ثبت بازرسی جدید', icon: Icons.assignment_add, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInspectionPage()))),
-                DashboardButton(title: 'ثبت عملکرد روزانه', icon: Icons.today, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyPerformancePage()))),
-                DashboardButton(title: 'بایگانی', icon: Icons.folder, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchivePage()))),
-                DashboardButton(title: 'گزارش‌ها', icon: Icons.bar_chart, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsPage()))),
-                DashboardButton(title: 'تنظیمات', icon: Icons.settings, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())); _loadProfile(); }),
-              ],
-            ),
+          DashboardButton(
+            title: 'ثبت عملکرد روزانه',
+            icon: Icons.today,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DailyPerformancePage(),
+                ),
+              );
+            },
+          ),
+          DashboardButton(
+            title: 'بایگانی',
+            icon: Icons.folder,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ArchivePage(),
+                ),
+              );
+            },
+          ),
+          DashboardButton(
+            title: 'گزارش‌ها',
+            icon: Icons.bar_chart,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ReportsPage(),
+                ),
+              );
+            },
+          ),
+          DashboardButton(
+            title: 'تنظیمات',
+            icon: Icons.settings,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SettingsPage(),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -649,8 +723,7 @@ class _NewInspectionPageState
   void initState() {
     super.initState();
 
-    dateController.text =
-        gregorianToJalali(DateTime.now());
+    dateController.text = AppSettings.todayJalali();
   }
 
   // ---------------------------------------------------
@@ -1843,7 +1916,7 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
   int get repeatedInspectionCount => repeatedGroups.values.fold<int>(0, (sum, list) => sum + list.length);
 
   Future<void> pickDate() async {
-    final initial = gregorianToJalali(DateTime.now()).split('/');
+    final initial = AppSettings.todayJalali().split('/');
     var year = int.tryParse(initial[0]) ?? 1405;
     var month = int.tryParse(initial[1]) ?? 1;
     var day = int.tryParse(initial[2]) ?? 1;
@@ -3073,7 +3146,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
   void initState() {
     super.initState();
     dateController = TextEditingController(
-      text: _normalizeDate(gregorianToJalali(DateTime.now())),
+      text: _normalizeDate(AppSettings.todayJalali()),
     );
     _loadInspections();
   }
@@ -3136,7 +3209,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
 
   Future<void> pickDate() async {
     final initial = _normalizeDate(dateController.text).split('/');
-    final today = _normalizeDate(gregorianToJalali(DateTime.now())).split('/');
+    final today = _normalizeDate(AppSettings.todayJalali()).split('/');
     var year = int.tryParse(initial.isNotEmpty ? initial[0] : '') ??
         int.tryParse(today[0]) ?? 1405;
     var month = int.tryParse(initial.length > 1 ? initial[1] : '') ??
@@ -3663,7 +3736,7 @@ class _ReportsPageState extends State<ReportsPage> {
   @override
   void initState() {
     super.initState();
-    final today = gregorianToJalali(DateTime.now());
+    final today = AppSettings.todayJalali();
     selectedMonth = _getMonth(today);
     startDate = today;
     endDate = today;
@@ -3818,7 +3891,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<String?> _pickJalaliDate({String? initial}) async {
-    final parts = _normalizeDigits(initial ?? gregorianToJalali(DateTime.now())).split('/');
+    final parts = _normalizeDigits(initial ?? AppSettings.todayJalali()).split('/');
     int year = int.tryParse(parts.length > 0 ? parts[0] : '') ?? 1405;
     int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
     int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
@@ -4479,203 +4552,237 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const String defaultName = 'رضا طاحونی';
-  String inspectorName = defaultName;
-  String profilePath = '';
-  bool busy = false;
-  DateTime selectedDateTime = DateTime.now();
+  final ImagePicker _imagePicker = ImagePicker();
+  late TextEditingController _nameController;
+  late TextEditingController _dateController;
+  late TextEditingController _timeController;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _nameController = TextEditingController(text: AppSettings.inspectorName);
+    _dateController = TextEditingController(text: AppSettings.todayJalali());
+    _timeController = TextEditingController(text: AppSettings.currentTime());
   }
 
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      inspectorName = prefs.getString('inspector_name') ?? defaultName;
-      profilePath = prefs.getString('profile_image_path') ?? '';
-      final saved = prefs.getString('app_datetime');
-      selectedDateTime = DateTime.tryParse(saved ?? '') ?? DateTime.now();
-    });
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _dateController.dispose();
+    _timeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickProfileImage() async {
+    final image = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (image == null) return;
+    await AppSettings.setProfileImagePath(image.path);
+    if (mounted) setState(() {});
   }
 
   Future<void> _changeName() async {
-    final controller = TextEditingController(text: inspectorName);
-    final value = await showDialog<String>(
+    final controller = TextEditingController(text: AppSettings.inspectorName);
+    final result = await showDialog<String>(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text('تغییر نام بازرس'),
         content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'نام بازرس')),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('انصراف')), ElevatedButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text('ذخیره'))],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('ذخیره')),
+        ],
       ),
     );
     controller.dispose();
-    if (value == null || value.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('inspector_name', value);
-    if (mounted) setState(() => inspectorName = value);
+    if (result != null && result.trim().isNotEmpty) {
+      await AppSettings.setInspectorName(result);
+      _nameController.text = AppSettings.inspectorName;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _changePassword() async {
     final oldC = TextEditingController();
     final newC = TextEditingController();
-    final confirmC = TextEditingController();
+    final repeatC = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text('تغییر رمز عبور'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: oldC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز فعلی')),
           TextField(controller: newC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز جدید')),
-          TextField(controller: confirmC, obscureText: true, decoration: const InputDecoration(labelText: 'تکرار رمز جدید')),
+          TextField(controller: repeatC, obscureText: true, decoration: const InputDecoration(labelText: 'تکرار رمز جدید')),
         ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('انصراف')), ElevatedButton(onPressed: () async {
-          final prefs = await SharedPreferences.getInstance();
-          final current = prefs.getString('app_password') ?? '1234';
-          if (oldC.text != current || newC.text.trim().isEmpty || newC.text != confirmC.text) return;
-          await prefs.setString('app_password', newC.text);
-          if (c.mounted) Navigator.pop(c, true);
-        }, child: const Text('ذخیره'))],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () {
+            if (oldC.text != AppSettings.password || newC.text.length < 4 || newC.text != repeatC.text) return;
+            Navigator.pop(context, true);
+          }, child: const Text('ذخیره')),
+        ],
       ),
     );
-    oldC.dispose(); newC.dispose(); confirmC.dispose();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok == true ? 'رمز عبور با موفقیت تغییر کرد.' : 'اطلاعات رمز صحیح نیست.')));
+    if (ok == true) {
+      await AppSettings.setPassword(newC.text);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز عبور با موفقیت تغییر کرد')));
+    } else if (mounted) {
+      // پیام فقط در صورت ورود ناقص/اشتباه لازم نیست؛ کاربر می‌تواند دوباره اقدام کند.
+    }
+    oldC.dispose(); newC.dispose(); repeatC.dispose();
   }
 
-  Future<void> _pickDateTime() async {
-    final d = await showDatePicker(context: context, initialDate: selectedDateTime, firstDate: DateTime(2020), lastDate: DateTime(2100));
-    if (d == null || !mounted) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(selectedDateTime));
-    if (t == null) return;
-    final value = DateTime(d.year, d.month, d.day, t.hour, t.minute);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('app_datetime', value.toIso8601String());
-    if (mounted) setState(() => selectedDateTime = value);
+  Future<String?> _pickJalaliDate({String? initial}) async {
+    final parts = (initial ?? AppSettings.todayJalali()).replaceAll('۰','0').replaceAll('۱','1').replaceAll('۲','2').replaceAll('۳','3').replaceAll('۴','4').replaceAll('۵','5').replaceAll('۶','6').replaceAll('۷','7').replaceAll('۸','8').replaceAll('۹','9').split('/');
+    var year = int.tryParse(parts[0]) ?? 1405;
+    var month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
+    var day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
+    return showDialog<String>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (context, setDialogState) {
+      final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+      if (day > maxDay) day = maxDay;
+      return AlertDialog(
+        title: const Text('تنظیم تاریخ شمسی'),
+        content: Row(children: [
+          Expanded(child: DropdownButtonFormField<int>(value: day, items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => day = v ?? day), decoration: const InputDecoration(labelText: 'روز'))),
+          const SizedBox(width: 8),
+          Expanded(child: DropdownButtonFormField<int>(value: month, items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => month = v ?? month), decoration: const InputDecoration(labelText: 'ماه'))),
+          const SizedBox(width: 8),
+          Expanded(child: DropdownButtonFormField<int>(value: year, items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => year = v ?? year), decoration: const InputDecoration(labelText: 'سال'))),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')), ElevatedButton(onPressed: () => Navigator.pop(dialogContext, '${year.toString().padLeft(4,'0')}/${month.toString().padLeft(2,'0')}/${day.toString().padLeft(2,'0')}'), child: const Text('ذخیره'))],
+      );
+    }));
   }
 
-  Future<void> _pickProfile() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 90);
-    if (image == null) return;
-    final base = await getApplicationDocumentsDirectory();
-    final target = File('${base.path}/inspector_profile.jpg');
-    await File(image.path).copy(target.path);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('profile_image_path', target.path);
-    if (mounted) setState(() => profilePath = target.path);
+  Future<void> _saveDateTime() async {
+    final date = _dateController.text.trim();
+    final time = _timeController.text.trim();
+    final valid = RegExp(r'^\d{4}/\d{2}/\d{2}$').hasMatch(_toEnglishDigits(date)) && RegExp(r'^\d{2}:\d{2}$').hasMatch(_toEnglishDigits(time));
+    if (!valid) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ یا ساعت واردشده معتبر نیست')));
+      return;
+    }
+    await AppSettings.setDate(_toEnglishDigits(date));
+    await AppSettings.setTime(_toEnglishDigits(time));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ و ساعت ذخیره شد و در تمام بخش‌های برنامه اعمال می‌شود')));
   }
 
-  String _displayDateTime() {
-    final d = selectedDateTime;
-    return '${toPersianDigits(d.year.toString())}/${toPersianDigits(d.month.toString().padLeft(2, '0'))}/${toPersianDigits(d.day.toString().padLeft(2, '0'))} - ${toPersianDigits(d.hour.toString().padLeft(2, '0'))}:${toPersianDigits(d.minute.toString().padLeft(2, '0'))}';
+  String _toEnglishDigits(String value) => value.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
+        const p='۰۱۲۳۴۵۶۷۸۹'; const a='٠١٢٣٤٥٦٧٨٩';
+        final c=m.group(0)!; final i=p.indexOf(c); return i >= 0 ? '$i' : '${a.indexOf(c)}';
+      });
+
+  Future<Map<String, dynamic>> _makeBackup() async {
+    final inspections = await AppStorage.getInspections();
+    final evidence = <Map<String, dynamic>>{};
+    for (final inspection in inspections) {
+      for (final item in inspection.evidences) {
+        if (item.path.isEmpty || evidence.containsKey(item.path)) continue;
+        try {
+          final file = File(item.path);
+          if (await file.exists()) evidence[item.path] = {'name': item.name, 'type': item.type, 'bytes': base64Encode(await file.readAsBytes())};
+        } catch (_) {}
+      }
+    }
+    Map<String, dynamic>? profile;
+    if (AppSettings.profileImagePath.isNotEmpty) {
+      try {
+        final file = File(AppSettings.profileImagePath);
+        if (await file.exists()) profile = {'bytes': base64Encode(await file.readAsBytes()), 'name': file.uri.pathSegments.last};
+      } catch (_) {}
+    }
+    return {'format': 'inspection_manager_backup_v2', 'createdAt': DateTime.now().toIso8601String(), 'settings': AppSettings.exportSettings(), 'profileImage': profile, 'inspections': inspections.map((e) => e.toJson()).toList(), 'evidenceFiles': evidence};
   }
 
   Future<void> _backup() async {
-    setState(() => busy = true);
+    if (_busy) return;
+    setState(() => _busy = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final prefMap = <String, dynamic>{};
-      for (final key in prefs.getKeys()) {
-        final v = prefs.get(key);
-        if (v is String || v is num || v is bool || v is List<String>) prefMap[key] = v;
-      }
-      final inspections = await AppStorage.getInspections();
-      final files = <Map<String, dynamic>>[];
-      final seen = <String>{};
-      for (final item in inspections) {
-        for (final evidence in item.evidences) {
-          final path = evidence.path;
-          if (path.isEmpty || seen.contains(path)) continue;
-          final f = File(path);
-          if (await f.exists()) {
-            files.add({'path': path, 'name': evidence.name, 'type': evidence.type, 'bytes': base64Encode(await f.readAsBytes())});
-            seen.add(path);
-          }
-        }
-      }
-      if (profilePath.isNotEmpty) {
-        final f = File(profilePath);
-        if (await f.exists()) files.add({'path': profilePath, 'name': 'inspector_profile.jpg', 'type': 'profile', 'bytes': base64Encode(await f.readAsBytes())});
-      }
-      final backup = {'format': 'InspectionManagerBackup', 'version': 1, 'createdAt': DateTime.now().toIso8601String(), 'preferences': prefMap, 'inspections': inspections.map((e) => e.toJson()).toList(), 'files': files};
-      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(backup)));
-      final path = await saveExportFileToPhone(bytes: bytes, fileName: 'inspection_backup.json');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره نسخه پشتیبان لغو شد.' : 'نسخه پشتیبان کامل ذخیره شد.')));
+      final data = await _makeBackup();
+      final bytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
+      final path = await FilePicker.platform.saveFile(dialogTitle: 'ذخیره نسخه پشتیبان', fileName: 'نسخه_پشتیبان_سامانه_بازرسی_${DateTime.now().millisecondsSinceEpoch}.backup.json', initialDirectory: '/storage/emulated/0/Download', bytes: Uint8List.fromList(bytes));
+      if (mounted && path != null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نسخه پشتیبان با موفقیت ذخیره شد')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در تهیه نسخه پشتیبان: $e')));
-    } finally { if (mounted) setState(() => busy = false); }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تهیه نسخه پشتیبان ناموفق بود: $e')));
+    } finally { if (mounted) setState(() => _busy = false); }
   }
 
   Future<void> _restore() async {
-    setState(() => busy = true);
+    if (_busy) return;
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], withData: true);
+    if (result == null || result.files.single.bytes == null) return;
+    setState(() => _busy = true);
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], withData: true);
-      if (result == null) return;
-      final bytes = result.files.single.bytes ?? await File(result.files.single.path!).readAsBytes();
-      final decoded = jsonDecode(utf8.decode(bytes));
-      if (decoded['format'] != 'InspectionManagerBackup') throw Exception('این فایل نسخه پشتیبان سامانه نیست.');
-      final inspectionsData = decoded['inspections'];
-      if (inspectionsData is! List) throw Exception('اطلاعات بازرسی داخل نسخه پشتیبان ناقص است.');
-      final restored = inspectionsData.map((e) => Inspection.fromJson(Map<String, dynamic>.from(e))).toList();
-      await AppStorage.saveInspections(restored);
-      final prefMap = decoded['preferences'];
-      if (prefMap is Map) {
-        final prefs = await SharedPreferences.getInstance();
-        for (final entry in prefMap.entries) {
-          final key = entry.key.toString(); final value = entry.value;
-          if (value is String) await prefs.setString(key, value);
-          else if (value is bool) await prefs.setBool(key, value);
-          else if (value is int) await prefs.setInt(key, value);
-          else if (value is double) await prefs.setDouble(key, value);
-          else if (value is List) await prefs.setStringList(key, value.map((e) => e.toString()).toList());
-        }
+      final json = jsonDecode(utf8.decode(result.files.single.bytes!));
+      if (json is! Map || json['format'] != 'inspection_manager_backup_v2') throw Exception('فرمت نسخه پشتیبان معتبر نیست');
+      final settings = Map<String, dynamic>.from(json['settings'] ?? {});
+      final rawInspections = (json['inspections'] as List? ?? []);
+      final restored = rawInspections.map((e) => Inspection.fromJson(Map<String, dynamic>.from(e))).toList();
+      final evidenceFiles = Map<String, dynamic>.from(json['evidenceFiles'] ?? {});
+      final evidenceDir = await getEvidenceDirectory();
+      final pathMap = <String, String>{};
+      for (final entry in evidenceFiles.entries) {
+        final oldPath = entry.key;
+        final info = Map<String, dynamic>.from(entry.value);
+        final name = info['name']?.toString().trim().isNotEmpty == true ? info['name'].toString() : 'evidence_${DateTime.now().millisecondsSinceEpoch}';
+        final safeName = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+        final newPath = '${evidenceDir.path}/restored_${DateTime.now().millisecondsSinceEpoch}_$safeName';
+        await File(newPath).writeAsBytes(base64Decode(info['bytes'].toString()));
+        pathMap[oldPath] = newPath;
       }
-      final files = decoded['files'];
-      if (files is List) {
-        for (final entry in files) {
-          if (entry is! Map) continue;
-          final path = entry['path']?.toString() ?? '';
-          final encoded = entry['bytes']?.toString() ?? '';
-          if (path.isEmpty || encoded.isEmpty) continue;
-          final target = File(path);
-          await target.parent.create(recursive: true);
-          await target.writeAsBytes(base64Decode(encoded), flush: true);
-        }
+      final finalInspections = restored.map((i) => i.copyWith(evidences: i.evidences.map((e) => EvidenceFile(path: pathMap[e.path] ?? e.path, type: e.type, name: e.name)).toList())).toList();
+      await AppStorage.saveInspections(finalInspections);
+      final profile = json['profileImage'];
+      if (profile is Map && profile['bytes'] != null) {
+        final dir = await getApplicationDocumentsDirectory();
+        final profilePath = '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        await File(profilePath).writeAsBytes(base64Decode(profile['bytes'].toString()));
+        settings['profileImagePath'] = profilePath;
       }
-      await _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمام اطلاعات نسخه پشتیبان با موفقیت بازیابی شد.')));
+      await AppSettings.restoreSettings(settings);
+      _nameController.text = AppSettings.inspectorName;
+      _dateController.text = AppSettings.todayJalali();
+      _timeController.text = AppSettings.currentTime();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمام اطلاعات نسخه پشتیبان با موفقیت بازیابی شد. برنامه را یک‌بار بازنشانی کنید.')));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی انجام نشد: $e')));
-    } finally { if (mounted) setState(() => busy = false); }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی ناموفق بود: $e')));
+    } finally { if (mounted) setState(() => _busy = false); }
   }
 
-  void _about() {
-    showAboutDialog(context: context, applicationName: 'سامانه مدیریت بازرسی', applicationVersion: '1.0.0', applicationIcon: const Icon(Icons.verified_user, color: Color(0xFFC9A227)), children: const [Text('سامانه مدیریت بازرسی برای ثبت، بایگانی، عملکرد روزانه و گزارش‌گیری بازرسی‌ها.')]);
-  }
-
-  Widget _tile({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFFC9A227)), title: Text(title), subtitle: Text(subtitle), trailing: const Icon(Icons.chevron_right), onTap: onTap));
+  Widget _tile({required IconData icon, required String title, required VoidCallback onTap, String? subtitle}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFFC9A227)), title: Text(title), subtitle: subtitle == null ? null : Text(subtitle), trailing: const Icon(Icons.chevron_left), onTap: _busy ? null : onTap));
 
   @override
   Widget build(BuildContext context) {
-    final hasImage = profilePath.isNotEmpty && File(profilePath).existsSync();
+    final hasPhoto = AppSettings.profileImagePath.isNotEmpty && File(AppSettings.profileImagePath).existsSync();
     return Scaffold(
       appBar: AppBar(title: const Text('تنظیمات')),
-      body: Stack(children: [
-        ListView(padding: const EdgeInsets.all(16), children: [
-          Card(child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-            GestureDetector(onTap: _pickProfile, child: CircleAvatar(radius: 38, backgroundImage: hasImage ? FileImage(File(profilePath)) : null, child: hasImage ? null : const Icon(Icons.person, size: 40))),
-            const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('پروفایل بازرس', style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 5), Text(inspectorName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), const SizedBox(height: 4), const Text('برای تغییر عکس روی تصویر بزنید.')])), const Icon(Icons.edit)]))),
-          _tile(icon: Icons.person, title: 'تغییر نام بازرس', subtitle: inspectorName, onTap: _changeName),
-          _tile(icon: Icons.lock, title: 'تغییر رمز عبور', subtitle: 'رمز ورود سامانه', onTap: _changePassword),
-          _tile(icon: Icons.calendar_month, title: 'تنظیم تاریخ و زمان', subtitle: _displayDateTime(), onTap: _pickDateTime),
-          _tile(icon: Icons.backup, title: 'نسخه پشتیبان', subtitle: 'ذخیره تمام بازرسی‌ها، تنظیمات و مستندات', onTap: _backup),
-          _tile(icon: Icons.restore, title: 'بازیابی اطلاعات', subtitle: 'بازیابی کامل از فایل نسخه پشتیبان', onTap: _restore),
-          _tile(icon: Icons.info_outline, title: 'درباره برنامه', subtitle: 'سامانه مدیریت بازرسی - نسخه 1.0.0', onTap: _about),
-        ]),
-        if (busy) const Positioned.fill(child: ColoredBox(color: Color(0x88000000), child: Center(child: CircularProgressIndicator()))),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+          Row(children: [
+            GestureDetector(onTap: _pickProfileImage, child: CircleAvatar(radius: 34, backgroundImage: hasPhoto ? FileImage(File(AppSettings.profileImagePath)) : null, child: hasPhoto ? null : const Icon(Icons.person, size: 38))),
+            const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(AppSettings.inspectorName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)), const SizedBox(height: 4), const Text('ویرایش پروفایل', style: TextStyle(color: Colors.grey))])),
+            IconButton(onPressed: _pickProfileImage, icon: const Icon(Icons.edit, color: Color(0xFFC9A227))),
+          ]),
+        ]))),
+        _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
+        _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور', onTap: _changePassword),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Row(children: [Expanded(child: TextField(controller: _dateController, readOnly: true, decoration: const InputDecoration(labelText: 'تاریخ شمسی', prefixIcon: Icon(Icons.calendar_month)))), const SizedBox(width: 8), IconButton(onPressed: () async { final v = await _pickJalaliDate(initial: _dateController.text); if (v != null) setState(() => _dateController.text = v); }, icon: const Icon(Icons.edit_calendar, color: Color(0xFFC9A227)))]),
+          const SizedBox(height: 10),
+          TextField(controller: _timeController, readOnly: true, decoration: const InputDecoration(labelText: 'ساعت', prefixIcon: Icon(Icons.access_time)), onTap: () async { final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (picked != null) setState(() => _timeController.text = '${picked.hour.toString().padLeft(2,'0')}:${picked.minute.toString().padLeft(2,'0')}'); }),
+          const SizedBox(height: 12), ElevatedButton.icon(onPressed: _saveDateTime, icon: const Icon(Icons.save), label: const Text('ذخیره تاریخ و زمان')),
+        ]))),
+        _tile(icon: Icons.backup_outlined, title: 'نسخه پشتیبان', subtitle: 'ذخیره تمام اطلاعات و مستندات', onTap: _backup),
+        _tile(icon: Icons.restore, title: 'بازیابی اطلاعات', subtitle: 'بازیابی کامل اطلاعات از فایل پشتیبان', onTap: _restore),
+        _tile(icon: Icons.info_outline, title: 'درباره برنامه', onTap: () => showAboutDialog(context: context, applicationName: 'سامانه مدیریت بازرسی', applicationVersion: '1.0.0', applicationLegalese: 'سامانه مدیریت بازرسی')),
+        const SizedBox(height: 20),
+        if (_busy) const Center(child: CircularProgressIndicator()),
       ]),
     );
   }
