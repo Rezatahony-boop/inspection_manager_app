@@ -4675,7 +4675,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<Map<String, dynamic>> _makeBackup() async {
     final inspections = await AppStorage.getInspections();
-    final evidence = <Map<String, dynamic>>{};
+    final evidence = <String, Map<String, dynamic>>{};
     for (final inspection in inspections) {
       for (final item in inspection.evidences) {
         if (item.path.isEmpty || evidence.containsKey(item.path)) continue;
