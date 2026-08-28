@@ -401,8 +401,10 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
-  void login() {
-    if (passwordController.text == '1234') {
+  Future<void> login() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPassword = prefs.getString('app_password') ?? '1234';
+    if (passwordController.text == savedPassword) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -482,80 +484,87 @@ class _LoginPageState extends State<LoginPage> {
 // داشبورد
 // =====================================================
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  String inspectorName = 'رضا طاحونی';
+  String profilePath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      inspectorName = prefs.getString('inspector_name') ?? 'رضا طاحونی';
+      profilePath = prefs.getString('profile_image_path') ?? '';
+    });
+  }
+
+  Widget _profileAvatar() {
+    if (profilePath.isNotEmpty && File(profilePath).existsSync()) {
+      return CircleAvatar(radius: 28, backgroundImage: FileImage(File(profilePath)));
+    }
+    return const CircleAvatar(
+      radius: 28,
+      child: Icon(Icons.person, size: 32),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('داشبورد'),
-      ),
-      body: GridView.count(
-        padding: const EdgeInsets.all(16),
-        crossAxisCount: 2,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
+      appBar: AppBar(title: const Text('داشبورد')),
+      body: Column(
         children: [
-          DashboardButton(
-            title: 'ثبت بازرسی جدید',
-            icon: Icons.assignment_add,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NewInspectionPage(),
-                ),
-              );
+          InkWell(
+            onTap: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+              _loadProfile();
             },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  _profileAvatar(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('بازرس', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                        Text(inspectorName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.edit, size: 20),
+                ],
+              ),
+            ),
           ),
-          DashboardButton(
-            title: 'ثبت عملکرد روزانه',
-            icon: Icons.today,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const DailyPerformancePage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'بایگانی',
-            icon: Icons.folder,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ArchivePage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'گزارش‌ها',
-            icon: Icons.bar_chart,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ReportsPage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'تنظیمات',
-            icon: Icons.settings,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SettingsPage(),
-                ),
-              );
-            },
+          Expanded(
+            child: GridView.count(
+              padding: const EdgeInsets.all(16),
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              children: [
+                DashboardButton(title: 'ثبت بازرسی جدید', icon: Icons.assignment_add, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewInspectionPage()))),
+                DashboardButton(title: 'ثبت عملکرد روزانه', icon: Icons.today, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyPerformancePage()))),
+                DashboardButton(title: 'بایگانی', icon: Icons.folder, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ArchivePage()))),
+                DashboardButton(title: 'گزارش‌ها', icon: Icons.bar_chart, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsPage()))),
+                DashboardButton(title: 'تنظیمات', icon: Icons.settings, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage())); _loadProfile(); }),
+              ],
+            ),
           ),
         ],
       ),
@@ -4462,19 +4471,212 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
   }
 }
 
-class SettingsPage
-    extends StatelessWidget {
-  const SettingsPage({
-    super.key,
-  });
+class SettingsPage extends StatefulWidget {
+  const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  static const String defaultName = 'رضا طاحونی';
+  String inspectorName = defaultName;
+  String profilePath = '';
+  bool busy = false;
+  DateTime selectedDateTime = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      inspectorName = prefs.getString('inspector_name') ?? defaultName;
+      profilePath = prefs.getString('profile_image_path') ?? '';
+      final saved = prefs.getString('app_datetime');
+      selectedDateTime = DateTime.tryParse(saved ?? '') ?? DateTime.now();
+    });
+  }
+
+  Future<void> _changeName() async {
+    final controller = TextEditingController(text: inspectorName);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('تغییر نام بازرس'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'نام بازرس')),
+        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('انصراف')), ElevatedButton(onPressed: () => Navigator.pop(c, controller.text.trim()), child: const Text('ذخیره'))],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('inspector_name', value);
+    if (mounted) setState(() => inspectorName = value);
+  }
+
+  Future<void> _changePassword() async {
+    final oldC = TextEditingController();
+    final newC = TextEditingController();
+    final confirmC = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('تغییر رمز عبور'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: oldC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز فعلی')),
+          TextField(controller: newC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز جدید')),
+          TextField(controller: confirmC, obscureText: true, decoration: const InputDecoration(labelText: 'تکرار رمز جدید')),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('انصراف')), ElevatedButton(onPressed: () async {
+          final prefs = await SharedPreferences.getInstance();
+          final current = prefs.getString('app_password') ?? '1234';
+          if (oldC.text != current || newC.text.trim().isEmpty || newC.text != confirmC.text) return;
+          await prefs.setString('app_password', newC.text);
+          if (c.mounted) Navigator.pop(c, true);
+        }, child: const Text('ذخیره'))],
+      ),
+    );
+    oldC.dispose(); newC.dispose(); confirmC.dispose();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok == true ? 'رمز عبور با موفقیت تغییر کرد.' : 'اطلاعات رمز صحیح نیست.')));
+  }
+
+  Future<void> _pickDateTime() async {
+    final d = await showDatePicker(context: context, initialDate: selectedDateTime, firstDate: DateTime(2020), lastDate: DateTime(2100));
+    if (d == null || !mounted) return;
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(selectedDateTime));
+    if (t == null) return;
+    final value = DateTime(d.year, d.month, d.day, t.hour, t.minute);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('app_datetime', value.toIso8601String());
+    if (mounted) setState(() => selectedDateTime = value);
+  }
+
+  Future<void> _pickProfile() async {
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 90);
+    if (image == null) return;
+    final base = await getApplicationDocumentsDirectory();
+    final target = File('${base.path}/inspector_profile.jpg');
+    await File(image.path).copy(target.path);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('profile_image_path', target.path);
+    if (mounted) setState(() => profilePath = target.path);
+  }
+
+  String _displayDateTime() {
+    final d = selectedDateTime;
+    return '${toPersianDigits(d.year.toString())}/${toPersianDigits(d.month.toString().padLeft(2, '0'))}/${toPersianDigits(d.day.toString().padLeft(2, '0'))} - ${toPersianDigits(d.hour.toString().padLeft(2, '0'))}:${toPersianDigits(d.minute.toString().padLeft(2, '0'))}';
+  }
+
+  Future<void> _backup() async {
+    setState(() => busy = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefMap = <String, dynamic>{};
+      for (final key in prefs.getKeys()) {
+        final v = prefs.get(key);
+        if (v is String || v is num || v is bool || v is List<String>) prefMap[key] = v;
+      }
+      final inspections = await AppStorage.getInspections();
+      final files = <Map<String, dynamic>>[];
+      final seen = <String>{};
+      for (final item in inspections) {
+        for (final evidence in item.evidences) {
+          final path = evidence.path;
+          if (path.isEmpty || seen.contains(path)) continue;
+          final f = File(path);
+          if (await f.exists()) {
+            files.add({'path': path, 'name': evidence.name, 'type': evidence.type, 'bytes': base64Encode(await f.readAsBytes())});
+            seen.add(path);
+          }
+        }
+      }
+      if (profilePath.isNotEmpty) {
+        final f = File(profilePath);
+        if (await f.exists()) files.add({'path': profilePath, 'name': 'inspector_profile.jpg', 'type': 'profile', 'bytes': base64Encode(await f.readAsBytes())});
+      }
+      final backup = {'format': 'InspectionManagerBackup', 'version': 1, 'createdAt': DateTime.now().toIso8601String(), 'preferences': prefMap, 'inspections': inspections.map((e) => e.toJson()).toList(), 'files': files};
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(backup)));
+      final path = await saveExportFileToPhone(bytes: bytes, fileName: 'inspection_backup.json');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره نسخه پشتیبان لغو شد.' : 'نسخه پشتیبان کامل ذخیره شد.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در تهیه نسخه پشتیبان: $e')));
+    } finally { if (mounted) setState(() => busy = false); }
+  }
+
+  Future<void> _restore() async {
+    setState(() => busy = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], withData: true);
+      if (result == null) return;
+      final bytes = result.files.single.bytes ?? await File(result.files.single.path!).readAsBytes();
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded['format'] != 'InspectionManagerBackup') throw Exception('این فایل نسخه پشتیبان سامانه نیست.');
+      final inspectionsData = decoded['inspections'];
+      if (inspectionsData is! List) throw Exception('اطلاعات بازرسی داخل نسخه پشتیبان ناقص است.');
+      final restored = inspectionsData.map((e) => Inspection.fromJson(Map<String, dynamic>.from(e))).toList();
+      await AppStorage.saveInspections(restored);
+      final prefMap = decoded['preferences'];
+      if (prefMap is Map) {
+        final prefs = await SharedPreferences.getInstance();
+        for (final entry in prefMap.entries) {
+          final key = entry.key.toString(); final value = entry.value;
+          if (value is String) await prefs.setString(key, value);
+          else if (value is bool) await prefs.setBool(key, value);
+          else if (value is int) await prefs.setInt(key, value);
+          else if (value is double) await prefs.setDouble(key, value);
+          else if (value is List) await prefs.setStringList(key, value.map((e) => e.toString()).toList());
+        }
+      }
+      final files = decoded['files'];
+      if (files is List) {
+        for (final entry in files) {
+          if (entry is! Map) continue;
+          final path = entry['path']?.toString() ?? '';
+          final encoded = entry['bytes']?.toString() ?? '';
+          if (path.isEmpty || encoded.isEmpty) continue;
+          final target = File(path);
+          await target.parent.create(recursive: true);
+          await target.writeAsBytes(base64Decode(encoded), flush: true);
+        }
+      }
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمام اطلاعات نسخه پشتیبان با موفقیت بازیابی شد.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی انجام نشد: $e')));
+    } finally { if (mounted) setState(() => busy = false); }
+  }
+
+  void _about() {
+    showAboutDialog(context: context, applicationName: 'سامانه مدیریت بازرسی', applicationVersion: '1.0.0', applicationIcon: const Icon(Icons.verified_user, color: Color(0xFFC9A227)), children: const [Text('سامانه مدیریت بازرسی برای ثبت، بایگانی، عملکرد روزانه و گزارش‌گیری بازرسی‌ها.')]);
+  }
+
+  Widget _tile({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFFC9A227)), title: Text(title), subtitle: Text(subtitle), trailing: const Icon(Icons.chevron_right), onTap: onTap));
 
   @override
   Widget build(BuildContext context) {
-    return const SimplePage(
-      title: 'تنظیمات',
-      message:
-          'تنظیمات بازرس و رمز عبور در مرحله بعد تکمیل می‌شود.',
-      icon: Icons.settings,
+    final hasImage = profilePath.isNotEmpty && File(profilePath).existsSync();
+    return Scaffold(
+      appBar: AppBar(title: const Text('تنظیمات')),
+      body: Stack(children: [
+        ListView(padding: const EdgeInsets.all(16), children: [
+          Card(child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+            GestureDetector(onTap: _pickProfile, child: CircleAvatar(radius: 38, backgroundImage: hasImage ? FileImage(File(profilePath)) : null, child: hasImage ? null : const Icon(Icons.person, size: 40))),
+            const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('پروفایل بازرس', style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 5), Text(inspectorName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), const SizedBox(height: 4), const Text('برای تغییر عکس روی تصویر بزنید.')])), const Icon(Icons.edit)]))),
+          _tile(icon: Icons.person, title: 'تغییر نام بازرس', subtitle: inspectorName, onTap: _changeName),
+          _tile(icon: Icons.lock, title: 'تغییر رمز عبور', subtitle: 'رمز ورود سامانه', onTap: _changePassword),
+          _tile(icon: Icons.calendar_month, title: 'تنظیم تاریخ و زمان', subtitle: _displayDateTime(), onTap: _pickDateTime),
+          _tile(icon: Icons.backup, title: 'نسخه پشتیبان', subtitle: 'ذخیره تمام بازرسی‌ها، تنظیمات و مستندات', onTap: _backup),
+          _tile(icon: Icons.restore, title: 'بازیابی اطلاعات', subtitle: 'بازیابی کامل از فایل نسخه پشتیبان', onTap: _restore),
+          _tile(icon: Icons.info_outline, title: 'درباره برنامه', subtitle: 'سامانه مدیریت بازرسی - نسخه 1.0.0', onTap: _about),
+        ]),
+        if (busy) const Positioned.fill(child: ColoredBox(color: Color(0x88000000), child: Center(child: CircularProgressIndicator()))),
+      ]),
     );
   }
 }
