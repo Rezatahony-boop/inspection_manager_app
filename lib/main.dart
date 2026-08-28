@@ -629,6 +629,18 @@ class DashboardPage extends StatelessWidget {
             },
           ),
           DashboardButton(
+            title: 'داشبورد مدیریتی',
+            icon: Icons.dashboard_customize,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ManagementDashboardPage(),
+                ),
+              );
+            },
+          ),
+          DashboardButton(
             title: 'تنظیمات',
             icon: Icons.settings,
             onTap: () {
@@ -644,6 +656,371 @@ class DashboardPage extends StatelessWidget {
       ),
     );
   }
+}
+
+
+// =====================================================
+// گزارش مدیریتی حرفه‌ای
+// =====================================================
+
+class ManagementDashboardPage extends StatefulWidget {
+  const ManagementDashboardPage({super.key});
+
+  @override
+  State<ManagementDashboardPage> createState() => _ManagementDashboardPageState();
+}
+
+class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
+  DateTimeRange? _range;
+  List<Inspection> _all = [];
+  Set<String> _selectedCities = {};
+  bool _loading = true;
+  bool _exporting = false;
+  String _logoPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final today = DateTime.now();
+    _range = DateTimeRange(
+      start: today.subtract(const Duration(days: 29)),
+      end: today,
+    );
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await AppStorage.getInspections();
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _all = data;
+      _logoPath = prefs.getString('management_report_logo') ?? '';
+      _loading = false;
+    });
+  }
+
+  String _norm(String v) {
+    var x = v.trim();
+    const p = '۰۱۲۳۴۵۶۷۸۹';
+    const a = '٠١٢٣٤٥٦٧٨٩';
+    const e = '0123456789';
+    for (var i = 0; i < 10; i++) {
+      x = x.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
+    }
+    final parts = x.split('/');
+    if (parts.length != 3) return x;
+    return '${parts[0].padLeft(4,'0')}/${parts[1].padLeft(2,'0')}/${parts[2].padLeft(2,'0')}';
+  }
+
+  DateTime _jalaliToApprox(String value) {
+    final p = _norm(value).split('/');
+    if (p.length != 3) return DateTime(1900);
+    final y = int.tryParse(p[0]) ?? 1900;
+    final m = int.tryParse(p[1]) ?? 1;
+    final d = int.tryParse(p[2]) ?? 1;
+    return DateTime(y, m, d);
+  }
+
+  List<String> get _cities {
+    final set = <String>{};
+    for (final i in _all) {
+      if (i.city.trim().isNotEmpty) set.add(i.city.trim());
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  List<Inspection> get _filtered {
+    if (_range == null) return [];
+    final startJ = gregorianToJalali(_range!.start);
+    final endJ = gregorianToJalali(_range!.end);
+    final start = _norm(startJ);
+    final end = _norm(endJ);
+    return _all.where((i) {
+      final d = _norm(i.date);
+      final inDate = d.compareTo(start) >= 0 && d.compareTo(end) <= 0;
+      final inCity = _selectedCities.isEmpty || _selectedCities.contains(i.city.trim());
+      return inDate && inCity;
+    }).toList();
+  }
+
+  int get _problemCount => _filtered.where((i) => i.problems.trim().isNotEmpty).length;
+
+  Map<String,int> get _cityCounts {
+    final out = <String,int>{};
+    for (final i in _filtered) {
+      final c = i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim();
+      out[c] = (out[c] ?? 0) + 1;
+    }
+    return out;
+  }
+
+  Map<String,int> get _cityProblems {
+    final out = <String,int>{};
+    for (final i in _filtered.where((e) => e.problems.trim().isNotEmpty)) {
+      final c = i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim();
+      out[c] = (out[c] ?? 0) + 1;
+    }
+    return out;
+  }
+
+  Future<void> _pickLogo() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('management_report_logo', image.path);
+    if (mounted) setState(() => _logoPath = image.path);
+  }
+
+  Future<void> _pickRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      initialDateRange: _range,
+      helpText: 'بازه گزارش را انتخاب کنید',
+      saveText: 'تأیید',
+      cancelText: 'انصراف',
+    );
+    if (picked != null) setState(() => _range = picked);
+  }
+
+  Future<void> _pickCities() async {
+    final temp = Set<String>.from(_selectedCities);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: const Text('انتخاب شهرهای محل بازرسی'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 420,
+            child: _cities.isEmpty
+                ? const Center(child: Text('شهری ثبت نشده است.'))
+                : ListView(
+                    children: _cities.map((city) => CheckboxListTile(
+                      value: temp.contains(city),
+                      title: Text(city),
+                      onChanged: (v) => setDialog(() {
+                        if (v == true) temp.add(city); else temp.remove(city);
+                      }),
+                    )).toList(),
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('انصراف')),
+            ElevatedButton(onPressed: () { setState(() => _selectedCities = temp); Navigator.pop(ctx); }, child: const Text('اعمال')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _rangeText {
+    if (_range == null) return 'انتخاب نشده';
+    return '${toPersianDigits(gregorianToJalali(_range!.start))} تا ${toPersianDigits(gregorianToJalali(_range!.end))}';
+  }
+
+  Future<void> _preview() async {
+    if (_filtered.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برای این بازه و شهرها بازرسی‌ای پیدا نشد.')));
+      return;
+    }
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => ManagementReportPreviewPage(
+      inspections: _filtered,
+      start: gregorianToJalali(_range!.start),
+      end: gregorianToJalali(_range!.end),
+      selectedCities: _selectedCities.toList(),
+      logoPath: _logoPath,
+    )));
+  }
+
+  Future<void> _exportExcel() async {
+    if (_exporting || _filtered.isEmpty) return;
+    setState(() => _exporting = true);
+    try {
+      final excel = Excel.createExcel();
+      final summary = excel['گزارش مدیریتی'];
+      final start = gregorianToJalali(_range!.start);
+      final end = gregorianToJalali(_range!.end);
+      summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
+      summary.appendRow([TextCellValue('گزارش مدیریتی حرفه‌ای'), TextCellValue('')]);
+      summary.appendRow([TextCellValue('نام بازرس'), TextCellValue(AppSettings.inspectorName)]);
+      summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue('$start تا $end')]);
+      summary.appendRow([TextCellValue('شهرهای انتخاب‌شده'), TextCellValue(_selectedCities.isEmpty ? 'همه شهرها' : _selectedCities.join('، '))]);
+      summary.appendRow([TextCellValue('کل بازرسی'), IntCellValue(_filtered.length)]);
+      summary.appendRow([TextCellValue('دارای مشکل'), IntCellValue(_problemCount)]);
+      summary.appendRow([TextCellValue('بدون مشکل'), IntCellValue(_filtered.length - _problemCount)]);
+      summary.appendRow([TextCellValue('درصد دارای مشکل'), TextCellValue(_filtered.isEmpty ? '0%' : '${((_problemCount / _filtered.length) * 100).toStringAsFixed(1)}%')]);
+      summary.appendRow([TextCellValue('')]);
+      summary.appendRow([TextCellValue('شهر'), TextCellValue('تعداد بازرسی'), TextCellValue('تعداد مشکل')]);
+      for (final c in _cityCounts.keys.toList()..sort()) {
+        summary.appendRow([TextCellValue(c), IntCellValue(_cityCounts[c] ?? 0), IntCellValue(_cityProblems[c] ?? 0)]);
+      }
+
+      final details = excel['جزئیات بازرسی‌ها'];
+      details.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('مستندات')]);
+      for (final i in _filtered) {
+        details.appendRow([TextCellValue(i.date), TextCellValue(i.agentCode), TextCellValue(i.agentName), TextCellValue(i.city), TextCellValue(i.problems.isEmpty ? 'بدون مشکل' : i.problems), IntCellValue(i.evidences.length)]);
+      }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('Excel خالی است');
+      final path = await saveExportFileToPhone(bytes: bytes, fileName: 'گزارش_مدیریتی_${start.replaceAll('/','-')}_تا_${end.replaceAll('/','-')}.xlsx');
+      if (path == null) return;
+      await OpenFilex.open(path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('گزارش Excel ذخیره و برای مشاهده باز شد.')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (_exporting || _filtered.isEmpty) return;
+    setState(() => _exporting = true);
+    try {
+      final doc = pw.Document();
+      pw.MemoryImage? logo;
+      if (_logoPath.isNotEmpty) {
+        final f = File(_logoPath);
+        if (await f.exists()) logo = pw.MemoryImage(await f.readAsBytes());
+      }
+      final start = gregorianToJalali(_range!.start);
+      final end = gregorianToJalali(_range!.end);
+      final cityRows = _cityCounts.keys.toList()..sort();
+      doc.addPage(pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (ctx) => [
+          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+            if (logo != null) pw.Image(logo!, width: 65, height: 65) else pw.SizedBox(width: 65),
+            pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+              pw.Text('Inspection Management System', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Management Report'),
+              pw.Text('Inspector: ${AppSettings.inspectorName}'),
+              pw.Text('Period: $start - $end'),
+            ]),
+          ]),
+          pw.SizedBox(height: 18),
+          pw.Table.fromTextArray(headers: ['Indicator','Value'], data: [
+            ['Total inspections','${_filtered.length}'],
+            ['Inspections with problems','$_problemCount'],
+            ['Inspections without problems','${_filtered.length - _problemCount}'],
+            ['Problem percentage','${((_problemCount / _filtered.length) * 100).toStringAsFixed(1)}%'],
+          ]),
+          pw.SizedBox(height: 18),
+          pw.Text('City comparison', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.Table.fromTextArray(headers: ['City','Inspections','Problems'], data: cityRows.map((c) => [c, '${_cityCounts[c]}', '${_cityProblems[c] ?? 0}']).toList()),
+          pw.SizedBox(height: 24),
+          pw.Text('Selected cities: ${_selectedCities.isEmpty ? 'All cities' : _selectedCities.join(', ')}'),
+          pw.SizedBox(height: 35),
+          pw.Text('Signature: ______________________________'),
+        ],
+      ));
+      final bytes = await doc.save();
+      final path = await saveExportFileToPhone(bytes: bytes, fileName: 'گزارش_مدیریتی_${start.replaceAll('/','-')}_تا_${end.replaceAll('/','-')}.pdf');
+      if (path == null) return;
+      await OpenFilex.open(path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('گزارش PDF ذخیره و برای مشاهده باز شد.')));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = _filtered.length;
+    final problems = _problemCount;
+    return Scaffold(
+      appBar: AppBar(title: const Text('داشبورد مدیریتی')),
+      body: _loading ? const Center(child: CircularProgressIndicator()) : ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(child: ListTile(leading: const Icon(Icons.date_range), title: const Text('بازه تاریخ گزارش'), subtitle: Text(_rangeText), trailing: const Icon(Icons.edit_calendar), onTap: _pickRange)),
+          const SizedBox(height: 10),
+          Card(child: ListTile(leading: const Icon(Icons.location_city), title: const Text('شهرهای محل بازرسی'), subtitle: Text(_selectedCities.isEmpty ? 'همه شهرها' : '${_selectedCities.length} شهر انتخاب شده'), trailing: const Icon(Icons.checklist), onTap: _pickCities)),
+          const SizedBox(height: 10),
+          Card(child: ListTile(leading: const Icon(Icons.image), title: const Text('لوگوی سربرگ'), subtitle: Text(_logoPath.isEmpty ? 'انتخاب لوگو' : 'لوگو انتخاب شده است'), trailing: const Icon(Icons.upload_file), onTap: _pickLogo)),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: _metric('کل بازرسی', '$count', Icons.assignment)),
+            const SizedBox(width: 8),
+            Expanded(child: _metric('دارای مشکل', '$problems', Icons.warning_amber)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: _metric('بدون مشکل', '${count - problems}', Icons.check_circle)),
+            const SizedBox(width: 8),
+            Expanded(child: _metric('درصد مشکل', count == 0 ? '۰٪' : '${((problems / count) * 100).toStringAsFixed(1)}٪', Icons.percent)),
+          ]),
+          const SizedBox(height: 16),
+          Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('مقایسه شهرها', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            ...(_cityCounts.keys.toList()..sort()).map((c) => Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [Expanded(child: Text(c)), Text('بازرسی: ${_cityCounts[c]}   مشکل: ${_cityProblems[c] ?? 0}')]))),
+          ]))),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(onPressed: _filtered.isEmpty ? null : _preview, icon: const Icon(Icons.preview), label: const Text('مشاهده گزارش قبل از ذخیره')),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: ElevatedButton.icon(onPressed: _filtered.isEmpty || _exporting ? null : _exportExcel, icon: const Icon(Icons.table_chart), label: const Text('خروجی Excel'))),
+            const SizedBox(width: 10),
+            Expanded(child: ElevatedButton.icon(onPressed: _filtered.isEmpty || _exporting ? null : _exportPdf, icon: const Icon(Icons.picture_as_pdf), label: const Text('خروجی PDF'))),
+          ]),
+          if (_exporting) const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator()),
+        ],
+      ),
+    );
+  }
+
+  Widget _metric(String title, String value, IconData icon) => Card(color: const Color(0xFF101B2E), child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [Icon(icon, color: const Color(0xFFC9A227), size: 30), const SizedBox(height: 6), Text(title), const SizedBox(height: 4), Text(toPersianDigits(value), style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold))])));
+}
+
+class ManagementReportPreviewPage extends StatelessWidget {
+  final List<Inspection> inspections;
+  final String start;
+  final String end;
+  final List<String> selectedCities;
+  final String logoPath;
+  const ManagementReportPreviewPage({super.key, required this.inspections, required this.start, required this.end, required this.selectedCities, required this.logoPath});
+
+  @override
+  Widget build(BuildContext context) {
+    final problems = inspections.where((e) => e.problems.trim().isNotEmpty).length;
+    final cities = <String, List<Inspection>>{};
+    for (final i in inspections) cities.putIfAbsent(i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim(), () => []).add(i);
+    return Scaffold(
+      appBar: AppBar(title: const Text('پیش‌نمایش گزارش مدیریتی')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+          if (logoPath.isNotEmpty && File(logoPath).existsSync()) Padding(padding: const EdgeInsets.only(bottom: 10), child: Image.file(File(logoPath), height: 80)),
+          const Text('گزارش مدیریتی حرفه‌ای', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text('نام بازرس: ${AppSettings.inspectorName}'),
+          Text('بازه گزارش: $start تا $end'),
+          Text('شهرها: ${selectedCities.isEmpty ? 'همه شهرها' : selectedCities.join('، ')}'),
+        ]))),
+        const SizedBox(height: 10),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
+          _row('تعداد کل بازرسی', inspections.length),
+          _row('تعداد دارای مشکل', problems),
+          _row('تعداد بدون مشکل', inspections.length - problems),
+          _row('درصد دارای مشکل', inspections.isEmpty ? 0 : (problems / inspections.length * 100).round()),
+        ]))),
+        const SizedBox(height: 10),
+        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('نمودار مقایسه شهرها', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          ...cities.entries.map((e) { final max = cities.values.map((v) => v.length).fold<int>(1, (a,b)=>a>b?a:b); return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [SizedBox(width: 90, child: Text(e.key, overflow: TextOverflow.ellipsis)), Expanded(child: LinearProgressIndicator(value: e.value.length / max, minHeight: 14)), const SizedBox(width: 8), Text(toPersianDigits('${e.value.length}'))])); }),
+        ]))),
+        const SizedBox(height: 25),
+        const Text('امضا: ........................................................', textAlign: TextAlign.center),
+      ]),
+    );
+  }
+
+  Widget _row(String title, int value) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(children: [Expanded(child: Text(title)), Text(toPersianDigits('$value'), style: const TextStyle(fontWeight: FontWeight.bold))]));
 }
 
 class DashboardButton extends StatelessWidget {
