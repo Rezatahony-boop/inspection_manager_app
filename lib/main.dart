@@ -1330,7 +1330,7 @@ class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
           const SizedBox(height: 10),
           Card(child: ListTile(leading: const Icon(Icons.location_city), title: const Text('شهرهای محل بازرسی'), subtitle: Text(_selectedCities.isEmpty ? 'همه شهرها' : '${_selectedCities.length} شهر انتخاب شده'), trailing: const Icon(Icons.checklist), onTap: _pickCities)),
           const SizedBox(height: 10),
-          Card(child: ListTile(leading: const Icon(Icons.image), title: const Text('لوگوی سربرگ'), subtitle: const Text('لوگوی پیش‌فرض سامانه مدیریت بازرسی'), trailing: const Icon(Icons.verified, color: Color(0xFFC9A227))),
+          Card(child: ListTile(leading: const Icon(Icons.image), title: const Text('لوگوی سربرگ'), subtitle: const Text('لوگوی پیش‌فرض سامانه مدیریت بازرسی'), trailing: const Icon(Icons.verified, color: Color(0xFFC9A227)))),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _metric('کل بازرسی', '$count', Icons.assignment)),
