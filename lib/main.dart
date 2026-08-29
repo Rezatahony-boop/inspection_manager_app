@@ -746,13 +746,13 @@ class DashboardPage extends StatelessWidget {
             },
           ),
           DashboardButton(
-            title: 'داشبورد مدیریتی',
-            icon: Icons.dashboard_customize,
+            title: 'سوابق عامل',
+            icon: Icons.manage_search,
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const ManagementDashboardPage(),
+                  builder: (_) => const AgentHistoryPage(),
                 ),
               );
             },
@@ -777,2173 +777,100 @@ class DashboardPage extends StatelessWidget {
 
 
 // =====================================================
-// گزارش مدیریتی حرفه‌ای
+// سوابق عامل
 // =====================================================
 
-class ManagementDashboardPage extends StatefulWidget {
-  const ManagementDashboardPage({super.key});
+class AgentHistoryPage extends StatefulWidget {
+  const AgentHistoryPage({super.key});
 
   @override
-  State<ManagementDashboardPage> createState() => _ManagementDashboardPageState();
+  State<AgentHistoryPage> createState() => _AgentHistoryPageState();
 }
 
-class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
-  DateTimeRange? _range;
+class _AgentHistoryPageState extends State<AgentHistoryPage> {
+  final TextEditingController _codeController = TextEditingController();
   List<Inspection> _all = [];
-  Set<String> _selectedCities = {};
+  List<Inspection> _results = [];
   bool _loading = true;
   bool _exporting = false;
-  String _logoPath = '';
 
   @override
   void initState() {
     super.initState();
-    final today = DateTime.now();
-    _range = DateTimeRange(
-      start: today.subtract(const Duration(days: 29)),
-      end: today,
-    );
     _load();
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
     final data = await AppStorage.getInspections();
     if (!mounted) return;
+    final code = _normalizeCode(_codeController.text);
+    final filtered = code.isEmpty
+        ? <Inspection>[]
+        : data.where((x) => _normalizeCode(x.agentCode) == code).toList()
+      ..sort((a, b) => _dateKey(b.date).compareTo(_dateKey(a.date)));
     setState(() {
       _all = data;
-      // لوگوی طراحی‌شده توسط کاربر، لوگوی ثابت و پیش‌فرض گزارش مدیریتی است.
-      _logoPath = '';
+      _results = filtered;
       _loading = false;
     });
   }
 
-  String _norm(String v) {
-    var x = v.trim();
-    const p = '۰۱۲۳۴۵۶۷۸۹';
-    const a = '٠١٢٣٤٥٦٧٨٩';
-    const e = '0123456789';
-    for (var i = 0; i < 10; i++) {
-      x = x.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
-    }
-    final parts = x.split('/');
-    if (parts.length != 3) return x;
-    return '${parts[0].padLeft(4,'0')}/${parts[1].padLeft(2,'0')}/${parts[2].padLeft(2,'0')}';
-  }
-
-  DateTime _jalaliToApprox(String value) {
-    final p = _norm(value).split('/');
-    if (p.length != 3) return DateTime(1900);
-    final y = int.tryParse(p[0]) ?? 1900;
-    final m = int.tryParse(p[1]) ?? 1;
-    final d = int.tryParse(p[2]) ?? 1;
-    return DateTime(y, m, d);
-  }
-
-  List<String> get _cities {
-    final set = <String>{};
-    for (final i in _all) {
-      if (i.city.trim().isNotEmpty) set.add(i.city.trim());
-    }
-    final list = set.toList()..sort();
-    return list;
-  }
-
-  // شهرهای گزارش: اگر کاربر هیچ انتخابی نداشته باشد، همه شهرهای موجود وارد گزارش می‌شوند.
-  // حتی اگر در بازه انتخابی برای یک شهر بازرسی صفر باشد، آن شهر با مقدار صفر در گزارش باقی می‌ماند.
-  List<String> get _reportCities {
-    final list = _selectedCities.isEmpty ? _cities : _selectedCities.toList();
-    list.sort();
-    return list;
-  }
-
-  List<Inspection> get _filtered {
-    if (_range == null) return [];
-    final startJ = gregorianToJalali(_range!.start);
-    final endJ = gregorianToJalali(_range!.end);
-    final start = _norm(startJ);
-    final end = _norm(endJ);
-    return _all.where((i) {
-      final d = _norm(i.date);
-      final inDate = d.compareTo(start) >= 0 && d.compareTo(end) <= 0;
-      final inCity = _selectedCities.isEmpty || _selectedCities.contains(i.city.trim());
-      return inDate && inCity;
-    }).toList();
-  }
-
-  int get _problemCount => _filtered.where((i) => i.problems.trim().isNotEmpty).length;
-
-  Map<String,int> get _cityCounts {
-    final out = <String,int>{};
-    for (final i in _filtered) {
-      final c = i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim();
-      out[c] = (out[c] ?? 0) + 1;
-    }
-    return out;
-  }
-
-  Map<String,int> get _cityProblems {
-    final out = <String,int>{};
-    for (final i in _filtered.where((e) => e.problems.trim().isNotEmpty)) {
-      final c = i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim();
-      out[c] = (out[c] ?? 0) + 1;
-    }
-    return out;
-  }
-
-  Future<void> _pickLogo() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('management_report_logo', image.path);
-    if (mounted) setState(() => _logoPath = image.path);
-  }
-
-  Future<String?> _pickJalaliDateForDashboard({String? initial}) async {
-    final raw = (initial ?? gregorianToJalali(DateTime.now()))
-        .replaceAll('۰','0').replaceAll('۱','1').replaceAll('۲','2').replaceAll('۳','3').replaceAll('۴','4')
-        .replaceAll('۵','5').replaceAll('۶','6').replaceAll('۷','7').replaceAll('۸','8').replaceAll('۹','9');
-    final parts = raw.split('/');
-    int year = int.tryParse((parts.length > 0 ? parts[0] : '')) ?? 1405;
-    int month = int.tryParse((parts.length > 1 ? parts[1] : '')) ?? 1;
-    int day = int.tryParse((parts.length > 2 ? parts[2] : '')) ?? 1;
-    month = month.clamp(1, 12).toInt();
-    day = day.clamp(1, _dashboardJalaliMonthDays(year, month)).toInt();
-    return showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final maxDay = _dashboardJalaliMonthDays(year, month);
-          if (day > maxDay) day = maxDay;
-          final years = List<int>.generate(41, (i) => year - 20 + i);
-          const monthNames = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
-          return AlertDialog(
-            title: const Text('انتخاب تاریخ شمسی'),
-            content: Directionality(
-              textDirection: TextDirection.rtl,
-              child: Row(children: [
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: day,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'روز'),
-                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
-                  onChanged: (v) => setDialogState(() => day = v ?? day),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: month,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'ماه'),
-                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(monthNames[v - 1]))).toList(),
-                  onChanged: (v) => setDialogState(() {
-                    month = v ?? month;
-                    day = day.clamp(1, _dashboardJalaliMonthDays(year, month)).toInt();
-                  }),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: year,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'سال'),
-                  items: years.map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
-                  onChanged: (v) => setDialogState(() {
-                    year = v ?? year;
-                    day = day.clamp(1, _dashboardJalaliMonthDays(year, month)).toInt();
-                  }),
-                )),
-              ]),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
-              ElevatedButton(onPressed: () => Navigator.pop(dialogContext, '$year/${month.toString().padLeft(2,'0')}/${day.toString().padLeft(2,'0')}'), child: const Text('تأیید')),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  int _dashboardJalaliMonthDays(int year, int month) {
-    if (month <= 6) return 31;
-    if (month <= 11) return 30;
-    // تعیین دقیق تعداد روزهای اسفند بر اساس فاصله نوروز دو سال متوالی.
-    final currentNowruz = jalaliToGregorianDate('$year/01/01');
-    final nextNowruz = jalaliToGregorianDate('${year + 1}/01/01');
-    return nextNowruz.difference(currentNowruz).inDays == 366 ? 30 : 29;
-  }
-
-  Future<void> _pickRange() async {
-    if (_range == null) return;
-    final currentStart = gregorianToJalali(_range!.start);
-    final currentEnd = gregorianToJalali(_range!.end);
-    final startJ = await _pickJalaliDateForDashboard(initial: currentStart);
-    if (startJ == null) return;
-    final endJ = await _pickJalaliDateForDashboard(initial: currentEnd);
-    if (endJ == null) return;
-    final start = jalaliToGregorianDate(startJ);
-    final end = jalaliToGregorianDate(endJ);
-    setState(() => _range = start.isAfter(end) ? DateTimeRange(start: end, end: start) : DateTimeRange(start: start, end: end));
-  }
-
-  Future<void> _pickCities() async {
-    final temp = Set<String>.from(_selectedCities);
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialog) => AlertDialog(
-          title: const Text('انتخاب شهرهای محل بازرسی'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 420,
-            child: _cities.isEmpty
-                ? const Center(child: Text('شهری ثبت نشده است.'))
-                : ListView(
-                    children: _cities.map((city) => CheckboxListTile(
-                      value: temp.contains(city),
-                      title: Text(city),
-                      onChanged: (v) => setDialog(() {
-                        if (v == true) temp.add(city); else temp.remove(city);
-                      }),
-                    )).toList(),
-                  ),
-          ),
-          actions: [
-            TextButton(onPressed: () => setDialog(() { temp.addAll(_cities); }), child: const Text('انتخاب همه')),
-            TextButton(onPressed: () => setDialog(() { temp.clear(); }), child: const Text('پاک کردن انتخاب')),
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('انصراف')),
-            ElevatedButton(onPressed: () { setState(() => _selectedCities = temp); Navigator.pop(ctx); }, child: const Text('اعمال')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String get _rangeText {
-    if (_range == null) return 'انتخاب نشده';
-    return '${toPersianDigits(gregorianToJalali(_range!.start))} تا ${toPersianDigits(gregorianToJalali(_range!.end))}';
-  }
-
-  Future<void> _preview() async {
-    if (_filtered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('برای این بازه و شهرها بازرسی‌ای پیدا نشد.')));
-      return;
-    }
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => ManagementReportPreviewPage(
-      inspections: _filtered,
-      start: gregorianToJalali(_range!.start),
-      end: gregorianToJalali(_range!.end),
-      selectedCities: _selectedCities.toList(),
-      logoPath: _logoPath,
-    )));
-  }
-
-  Future<void> _exportExcel() async {
-    if (_exporting || _filtered.isEmpty) return;
-    setState(() => _exporting = true);
-    try {
-      final excel = Excel.createExcel();
-      final summary = excel['گزارش مدیریتی'];
-      final start = gregorianToJalali(_range!.start);
-      final end = gregorianToJalali(_range!.end);
-      summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
-      summary.appendRow([TextCellValue('گزارش مدیریتی حرفه‌ای'), TextCellValue('')]);
-      summary.appendRow([TextCellValue('نام بازرس'), TextCellValue(AppSettings.inspectorName)]);
-      summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue('$start تا $end')]);
-      summary.appendRow([TextCellValue('شهرهای انتخاب‌شده'), TextCellValue(_selectedCities.isEmpty ? 'همه شهرها' : _selectedCities.join('، '))]);
-      summary.appendRow([TextCellValue('کل بازرسی'), IntCellValue(_filtered.length)]);
-      summary.appendRow([TextCellValue('دارای مشکل'), IntCellValue(_problemCount)]);
-      summary.appendRow([TextCellValue('بدون مشکل'), IntCellValue(_filtered.length - _problemCount)]);
-      summary.appendRow([TextCellValue('درصد دارای مشکل'), TextCellValue(_filtered.isEmpty ? '0%' : '${((_problemCount / _filtered.length) * 100).toStringAsFixed(1)}%')]);
-      summary.appendRow([TextCellValue('')]);
-      summary.appendRow([TextCellValue('شهر'), TextCellValue('تعداد بازرسی'), TextCellValue('تعداد مشکل')]);
-      for (final c in _reportCities) {
-        summary.appendRow([TextCellValue(c), IntCellValue(_cityCounts[c] ?? 0), IntCellValue(_cityProblems[c] ?? 0)]);
-      }
-
-      final details = excel['جزئیات بازرسی‌ها'];
-      details.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('مستندات')]);
-      for (final i in _filtered) {
-        details.appendRow([TextCellValue(i.date), TextCellValue(i.agentCode), TextCellValue(i.agentName), TextCellValue(i.city), TextCellValue(i.problems.isEmpty ? 'بدون مشکل' : i.problems), IntCellValue(i.evidences.length)]);
-      }
-      final bytes = excel.save();
-      if (bytes == null || bytes.isEmpty) throw Exception('Excel خالی است');
-      final path = await previewThenSaveExportFile(
-        bytes: bytes,
-        fileName: 'گزارش_مدیریتی_${start.replaceAll('/','-')}_تا_${end.replaceAll('/','-')}.xlsx',
-      );
-      if (path == null) return;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('گزارش Excel در حافظه گوشی ذخیره شد. از پوشه Download می‌توانید آن را باز و چاپ کنید.'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
-  Future<void> _exportPdf() async {
-    if (_exporting || _filtered.isEmpty) return;
-    setState(() => _exporting = true);
-    try {
-      final doc = pw.Document();
-      final persianFont = _buildPersianPdfFont();
-      pw.MemoryImage? logo;
-
-      if (_logoPath.isNotEmpty) {
-        final f = File(_logoPath);
-        if (await f.exists()) {
-          logo = pw.MemoryImage(await f.readAsBytes());
-        }
-      }
-      // اگر لوگوی انتخابی در دسترس نبود، لوگوی رسمی پیش‌فرض سامانه استفاده می‌شود.
-      logo ??= pw.MemoryImage(base64Decode(_defaultManagementLogoBase64));
-
-      final startDate = gregorianToJalali(_range!.start);
-      final endDate = gregorianToJalali(_range!.end);
-      final cityRows = _reportCities;
-
-      final baseStyle = pw.TextStyle(
-        font: persianFont,
-        fontSize: 10,
-      );
-      final boldStyle = pw.TextStyle(
-        font: persianFont,
-        fontSize: 11,
-        fontWeight: pw.FontWeight.bold,
-      );
-
-      doc.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          textDirection: pw.TextDirection.rtl,
-          theme: pw.ThemeData.withFont(
-            base: persianFont,
-            bold: persianFont,
-          ),
-          margin: const pw.EdgeInsets.all(32),
-          header: (ctx) => pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
-            child: pw.Column(
-              children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Expanded(
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.end,
-                        children: [
-                          pw.Text(
-                            'سامانه مدیریت بازرسی',
-                            style: pw.TextStyle(
-                              font: persianFont,
-                              fontSize: 18,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                            textAlign: pw.TextAlign.right,
-                          ),
-                          pw.SizedBox(height: 4),
-                          pw.Text(
-                            'گزارش مدیریتی حرفه‌ای',
-                            style: pw.TextStyle(
-                              font: persianFont,
-                              fontSize: 13,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                            textAlign: pw.TextAlign.right,
-                          ),
-                          pw.SizedBox(height: 3),
-                          pw.Text(
-                            'نام بازرس: ${AppSettings.inspectorName}',
-                            style: baseStyle,
-                            textAlign: pw.TextAlign.right,
-                          ),
-                          pw.Text(
-                            'بازه گزارش: $startDate تا $endDate',
-                            style: baseStyle,
-                            textAlign: pw.TextAlign.right,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (logo != null)
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(left: 8),
-                        child: pw.Image(logo!, width: 70, height: 70),
-                      )
-                    else
-                      pw.SizedBox(width: 70),
-                  ],
-                ),
-                pw.SizedBox(height: 8),
-                pw.Divider(),
-              ],
-            ),
-          ),
-          footer: (ctx) => pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  'امضا: ______________________________',
-                  style: baseStyle,
-                ),
-                pw.Text(
-                  'صفحه ${ctx.pageNumber} از ${ctx.pagesCount}',
-                  style: baseStyle,
-                ),
-              ],
-            ),
-          ),
-          build: (ctx) => [
-            pw.Directionality(
-              textDirection: pw.TextDirection.rtl,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                children: [
-                  pw.Text(
-                    'خلاصه گزارش',
-                    style: pw.TextStyle(
-                      font: persianFont,
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                    textAlign: pw.TextAlign.right,
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Table.fromTextArray(
-                    headers: ['شاخص', 'مقدار'],
-                    data: [
-                      ['تعداد کل بازرسی‌ها', '${_filtered.length}'],
-                      ['تعداد بازرسی‌های دارای مشکل', '$_problemCount'],
-                      ['تعداد بازرسی‌های بدون مشکل', '${_filtered.length - _problemCount}'],
-                      [
-                        'درصد بازرسی‌های دارای مشکل',
-                        '${((_problemCount / _filtered.length) * 100).toStringAsFixed(1)}٪',
-                      ],
-                    ],
-                    headerStyle: boldStyle,
-                    cellStyle: baseStyle,
-                    cellAlignment: pw.Alignment.centerRight,
-                    headerAlignment: pw.Alignment.centerRight,
-                  ),
-                  pw.SizedBox(height: 18),
-                  pw.Text(
-                    'آمار به تفکیک شهر',
-                    style: pw.TextStyle(
-                      font: persianFont,
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                    textAlign: pw.TextAlign.right,
-                  ),
-                  pw.SizedBox(height: 8),
-                  pw.Table.fromTextArray(
-                    headers: ['شهر', 'تعداد بازرسی', 'تعداد مشکل'],
-                    data: cityRows
-                        .map(
-                          (c) => [
-                            c,
-                            '${_cityCounts[c] ?? 0}',
-                            '${_cityProblems[c] ?? 0}',
-                          ],
-                        )
-                        .toList(),
-                    headerStyle: boldStyle,
-                    cellStyle: baseStyle,
-                    cellAlignment: pw.Alignment.centerRight,
-                    headerAlignment: pw.Alignment.centerRight,
-                  ),
-                  pw.SizedBox(height: 18),
-                  pw.Text(
-                    'شهرهای انتخاب‌شده: ${_selectedCities.isEmpty ? 'همه شهرها' : _selectedCities.join('، ')}',
-                    style: baseStyle,
-                    textAlign: pw.TextAlign.right,
-                  ),
-                  pw.SizedBox(height: 20),
-                  pw.Text(
-                    'نمودار مقایسه شهرها',
-                    style: pw.TextStyle(
-                      font: persianFont,
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                    textAlign: pw.TextAlign.right,
-                  ),
-                  pw.SizedBox(height: 8),
-                  ...cityRows.map(
-                    (city) {
-                      final count = _cityCounts[city] ?? 0;
-                      final problem = _cityProblems[city] ?? 0;
-                      final ratio = _filtered.isEmpty ? 0.0 : count / _filtered.length;
-                      return pw.Padding(
-                        padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                        child: pw.Row(
-                          children: [
-                            pw.SizedBox(
-                              width: 95,
-                              child: pw.Text(
-                                city,
-                                style: baseStyle,
-                                textAlign: pw.TextAlign.right,
-                              ),
-                            ),
-                            pw.Expanded(
-                              child: pw.Container(
-                                height: 16,
-                                decoration: pw.BoxDecoration(
-                                  color: PdfColors.grey300,
-                                  borderRadius: pw.BorderRadius.circular(4),
-                                ),
-                                child: pw.Align(
-                                  alignment: pw.Alignment.centerRight,
-                                  child: pw.Container(
-                                    width: 260.0 * (ratio.clamp(0.0, 1.0) as double),
-                                    height: 16,
-                                    decoration: pw.BoxDecoration(
-                                      color: PdfColors.blueGrey,
-                                      borderRadius: pw.BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            pw.SizedBox(width: 8),
-                            pw.SizedBox(
-                              width: 85,
-                              child: pw.Text(
-                                'بازرسی: $count | مشکل: $problem',
-                                style: pw.TextStyle(font: persianFont, fontSize: 8),
-                                textAlign: pw.TextAlign.right,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
-      final bytes = await doc.save();
-      final path = await previewThenSaveExportFile(
-        bytes: bytes,
-        fileName: 'گزارش_مدیریتی_${startDate.replaceAll('/', '-')}_تا_${endDate.replaceAll('/', '-')}.pdf',
-      );
-      if (path == null) return;
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'گزارش PDF با متن فارسی در حافظه گوشی ذخیره شد. از پوشه Download می‌توانید آن را باز و چاپ کنید.',
-            ),
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در ساخت PDF: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final count = _filtered.length;
-    final problems = _problemCount;
-    return Scaffold(
-      appBar: AppBar(title: const Text('داشبورد مدیریتی')),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(child: ListTile(leading: const Icon(Icons.date_range), title: const Text('بازه تاریخ گزارش'), subtitle: Text(_rangeText), trailing: const Icon(Icons.edit_calendar), onTap: _pickRange)),
-          const SizedBox(height: 10),
-          Card(child: ListTile(leading: const Icon(Icons.location_city), title: const Text('شهرهای محل بازرسی'), subtitle: Text(_selectedCities.isEmpty ? 'همه شهرها' : '${_selectedCities.length} شهر انتخاب شده'), trailing: const Icon(Icons.checklist), onTap: _pickCities)),
-          const SizedBox(height: 10),
-          Card(child: ListTile(leading: const Icon(Icons.image), title: const Text('لوگوی سربرگ'), subtitle: const Text('لوگوی پیش‌فرض سامانه مدیریت بازرسی'), trailing: const Icon(Icons.verified, color: Color(0xFFC9A227)))),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _metric('کل بازرسی', '$count', Icons.assignment)),
-            const SizedBox(width: 8),
-            Expanded(child: _metric('دارای مشکل', '$problems', Icons.warning_amber)),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(child: _metric('بدون مشکل', '${count - problems}', Icons.check_circle)),
-            const SizedBox(width: 8),
-            Expanded(child: _metric('درصد مشکل', count == 0 ? '۰٪' : '${((problems / count) * 100).toStringAsFixed(1)}٪', Icons.percent)),
-          ]),
-          const SizedBox(height: 16),
-          Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('مقایسه شهرها', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            ...(_cityCounts.keys.toList()..sort()).map((c) => Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [Expanded(child: Text(c)), Text('بازرسی: ${_cityCounts[c]}   مشکل: ${_cityProblems[c] ?? 0}')]))),
-          ]))),
-          const SizedBox(height: 18),
-          ElevatedButton.icon(onPressed: _filtered.isEmpty ? null : _preview, icon: const Icon(Icons.preview), label: const Text('مشاهده گزارش قبل از ذخیره')),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: ElevatedButton.icon(onPressed: _filtered.isEmpty || _exporting ? null : _exportExcel, icon: const Icon(Icons.table_chart), label: const Text('خروجی Excel'))),
-            const SizedBox(width: 10),
-            Expanded(child: ElevatedButton.icon(onPressed: _filtered.isEmpty || _exporting ? null : _exportPdf, icon: const Icon(Icons.picture_as_pdf), label: const Text('خروجی PDF'))),
-          ]),
-          if (_exporting) const Padding(padding: EdgeInsets.all(12), child: LinearProgressIndicator()),
-        ],
-      ),
-    );
-  }
-
-  Widget _metric(String title, String value, IconData icon) => Card(color: const Color(0xFF101B2E), child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [Icon(icon, color: const Color(0xFFC9A227), size: 30), const SizedBox(height: 6), Text(title), const SizedBox(height: 4), Text(toPersianDigits(value), style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold))])));
-}
-
-class ManagementReportPreviewPage extends StatelessWidget {
-  final List<Inspection> inspections;
-  final String start;
-  final String end;
-  final List<String> selectedCities;
-  final String logoPath;
-  const ManagementReportPreviewPage({super.key, required this.inspections, required this.start, required this.end, required this.selectedCities, required this.logoPath});
-
-  @override
-  Widget build(BuildContext context) {
-    final problems = inspections.where((e) => e.problems.trim().isNotEmpty).length;
-    final cities = <String, List<Inspection>>{};
-    for (final i in inspections) {
-      cities.putIfAbsent(i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim(), () => []).add(i);
-    }
-    final reportCities = selectedCities.isEmpty
-        ? (cities.keys.toList()..sort())
-        : (selectedCities.toList()..sort());
-    for (final city in reportCities) {
-      cities.putIfAbsent(city, () => <Inspection>[]);
-    }
-    return Scaffold(
-      appBar: AppBar(title: const Text('پیش‌نمایش گزارش مدیریتی')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-          Padding(padding: const EdgeInsets.only(bottom: 10), child: logoPath.isNotEmpty && File(logoPath).existsSync() ? Image.file(File(logoPath), height: 80) : Image.memory(base64Decode(_defaultManagementLogoBase64), height: 80)),
-          const Text('گزارش مدیریتی حرفه‌ای', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text('نام بازرس: ${AppSettings.inspectorName}'),
-          Text('بازه گزارش: $start تا $end'),
-          Text('شهرها: ${selectedCities.isEmpty ? 'همه شهرها' : selectedCities.join('، ')}'),
-        ]))),
-        const SizedBox(height: 10),
-        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
-          _row('تعداد کل بازرسی', inspections.length),
-          _row('تعداد دارای مشکل', problems),
-          _row('تعداد بدون مشکل', inspections.length - problems),
-          _row('درصد دارای مشکل', inspections.isEmpty ? 0 : (problems / inspections.length * 100).round()),
-        ]))),
-        const SizedBox(height: 10),
-        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('نمودار مقایسه شهرها', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          ...cities.entries.map((e) { final max = cities.values.map((v) => v.length).fold<int>(1, (a,b)=>a>b?a:b); return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [SizedBox(width: 90, child: Text(e.key, overflow: TextOverflow.ellipsis)), Expanded(child: LinearProgressIndicator(value: e.value.length / max, minHeight: 14)), const SizedBox(width: 8), Text(toPersianDigits('${e.value.length}'))])); }),
-        ]))),
-        const SizedBox(height: 25),
-        const Text('امضا: ........................................................', textAlign: TextAlign.center),
-      ]),
-    );
-  }
-
-  Widget _row(String title, int value) => Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(children: [Expanded(child: Text(title)), Text(toPersianDigits('$value'), style: const TextStyle(fontWeight: FontWeight.bold))]));
-}
-
-class DashboardButton extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const DashboardButton({
-    super.key,
-    required this.title,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF101B2E),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 46,
-              color: const Color(0xFFC9A227),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// ثبت بازرسی
-// =====================================================
-
-class NewInspectionPage extends StatefulWidget {
-  const NewInspectionPage({super.key});
-
-  @override
-  State<NewInspectionPage> createState() =>
-      _NewInspectionPageState();
-}
-
-class _NewInspectionPageState
-    extends State<NewInspectionPage> {
-  final dateController = TextEditingController();
-  final agentCodeController = TextEditingController();
-  final agentNameController = TextEditingController();
-  final cityController = TextEditingController();
-  final problemsController = TextEditingController();
-
-  final ImagePicker imagePicker = ImagePicker();
-  final AudioRecorder audioRecorder = AudioRecorder();
-
-  final List<EvidenceFile> evidences = [];
-
-  bool saving = false;
-  bool recording = false;
-  String? recordingPath;
-
-  @override
-  void initState() {
-    super.initState();
-
-    dateController.text = AppSettings.todayJalali();
-  }
-
-  // ---------------------------------------------------
-  // عکس از گالری
-  // ---------------------------------------------------
-
-  Future<void> pickGalleryImages() async {
-    try {
-      final images =
-          await imagePicker.pickMultiImage(
-        imageQuality: 90,
-      );
-
-      if (images.isEmpty) return;
-
-      final directory =
-          await getEvidenceDirectory();
-
-      for (final image in images) {
-        final extension =
-            image.path.split('.').last;
-
-        final fileName =
-            'photo_${DateTime.now().millisecondsSinceEpoch}_'
-            '${evidences.length}.$extension';
-
-        final destination = File(
-          '${directory.path}/$fileName',
-        );
-
-        await File(image.path).copy(
-          destination.path,
-        );
-
-        evidences.add(
-          EvidenceFile(
-            path: destination.path,
-            type: 'image',
-            name: fileName,
-          ),
-        );
-      }
-
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (e) {
-      showMessage('خطا در انتخاب عکس');
-    }
-  }
-
-  // ---------------------------------------------------
-  // دوربین
-  // ---------------------------------------------------
-
-  Future<void> takePhoto() async {
-    try {
-      final image = await imagePicker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
-      );
-
-      if (image == null) return;
-
-      final directory =
-          await getEvidenceDirectory();
-
-      final extension =
-          image.path.split('.').last;
-
-      final fileName =
-          'camera_${DateTime.now().millisecondsSinceEpoch}.$extension';
-
-      final destination = File(
-        '${directory.path}/$fileName',
-      );
-
-      await File(image.path).copy(
-        destination.path,
-      );
-
-      evidences.add(
-        EvidenceFile(
-          path: destination.path,
-          type: 'image',
-          name: fileName,
-        ),
-      );
-
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (_) {
-      showMessage('خطا در گرفتن عکس');
-    }
-  }
-
-  // ---------------------------------------------------
-  // فایل
-  // ---------------------------------------------------
-
-  Future<void> pickFile() async {
-    try {
-      final result =
-          await FilePicker.platform.pickFiles();
-
-      if (result == null ||
-          result.files.isEmpty) {
-        return;
-      }
-
-      final picked = result.files.first;
-
-      if (picked.path == null) {
-        showMessage('فایل قابل دسترسی نیست');
-        return;
-      }
-
-      final directory =
-          await getEvidenceDirectory();
-
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_'
-          '${picked.name}';
-
-      final destination = File(
-        '${directory.path}/$fileName',
-      );
-
-      await File(picked.path!).copy(
-        destination.path,
-      );
-
-      evidences.add(
-        EvidenceFile(
-          path: destination.path,
-          type: 'file',
-          name: picked.name,
-        ),
-      );
-
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (_) {
-      showMessage('خطا در انتخاب فایل');
-    }
-  }
-
-  // ---------------------------------------------------
-  // ضبط وویس
-  // ---------------------------------------------------
-
-  Future<void> startRecording() async {
-    try {
-      final hasPermission =
-          await audioRecorder.hasPermission();
-
-      if (!hasPermission) {
-        showMessage(
-          'اجازه استفاده از میکروفون داده نشد',
-        );
-        return;
-      }
-
-      final directory =
-          await getEvidenceDirectory();
-
-      recordingPath =
-          '${directory.path}/voice_'
-          '${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-      await audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path: recordingPath!,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        recording = true;
-      });
-    } catch (_) {
-      showMessage('خطا در شروع ضبط صدا');
-    }
-  }
-
-  Future<void> stopRecording() async {
-    try {
-      final path = await audioRecorder.stop();
-
-      if (mounted) {
-        setState(() {
-          recording = false;
-        });
-      }
-
-      if (path != null && path.isNotEmpty) {
-        final file = EvidenceFile(
-          path: path,
-          type: 'audio',
-          name: 'فایل صوتی',
-        );
-
-        evidences.add(file);
-
-        if (mounted) {
-          setState(() {});
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          recording = false;
-        });
-      }
-
-      showMessage('خطا در ذخیره فایل صوتی');
-    }
-  }
-
-  // ---------------------------------------------------
-  // حذف مستند
-  // ---------------------------------------------------
-
-  Future<void> removeEvidence(
-    int index,
-  ) async {
-    final evidence = evidences[index];
-
-    try {
-      final file = File(evidence.path);
-
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
-
-    setState(() {
-      evidences.removeAt(index);
-    });
-  }
-
-  // ---------------------------------------------------
-  // پیام
-  // ---------------------------------------------------
-
-  void showMessage(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------
-  // ذخیره بازرسی
-  // ---------------------------------------------------
-
-  Future<void> save() async {
-    if (agentCodeController.text.trim().isEmpty) {
-      showMessage('کد عامل را وارد کنید');
-      return;
-    }
-
-    setState(() {
-      saving = true;
-    });
-
-    final inspection = Inspection(
-      id: DateTime.now()
-          .millisecondsSinceEpoch
-          .toString(),
-      date: dateController.text.trim(),
-      agentCode: agentCodeController.text.trim(),
-      agentName: agentNameController.text.trim(),
-      city: cityController.text.trim(),
-      problems: problemsController.text.trim(),
-      evidences: List<EvidenceFile>.from(evidences),
-    );
-
-    await AppStorage.addInspection(inspection);
-
-    if (!mounted) return;
-
-    setState(() {
-      saving = false;
-    });
-
-    showMessage(
-      'بازرسی و مستندات با موفقیت ثبت شد',
-    );
-
-    Navigator.pop(context);
-  }
-
-  @override
-  void dispose() {
-    if (recording) {
-      audioRecorder.stop();
-    }
-
-    audioRecorder.dispose();
-
-    dateController.dispose();
-    agentCodeController.dispose();
-    agentNameController.dispose();
-    cityController.dispose();
-    problemsController.dispose();
-
-    super.dispose();
-  }
-
-  // ---------------------------------------------------
-  // کارت مستندات
-  // ---------------------------------------------------
-
-  Widget evidenceSection() {
-    return Card(
-      color: const Color(0xFF101B2E),
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(
-                  Icons.attach_file,
-                  color: Color(0xFFC9A227),
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'ثبت مستندات',
-                  style: TextStyle(
-                    color: Color(0xFFC9A227),
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 14),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: pickGalleryImages,
-                    icon: const Icon(Icons.photo),
-                    label: const Text('گالری'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: takePhoto,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text('دوربین'),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        recording
-                            ? stopRecording
-                            : startRecording,
-                    icon: Icon(
-                      recording
-                          ? Icons.stop
-                          : Icons.mic,
-                    ),
-                    label: Text(
-                      recording
-                          ? 'پایان ضبط'
-                          : 'ضبط وویس',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: pickFile,
-                    icon: const Icon(
-                      Icons.insert_drive_file,
-                    ),
-                    label: const Text('فایل'),
-                  ),
-                ),
-              ],
-            ),
-
-            if (recording) ...[
-              const SizedBox(height: 12),
-              const Row(
-                children: [
-                  Icon(
-                    Icons.fiber_manual_record,
-                    color: Colors.red,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'در حال ضبط صدا...',
-                    style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            if (evidences.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Divider(),
-              const Text(
-                'مستندات اضافه‌شده:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-
-              ...List.generate(
-                evidences.length,
-                (index) {
-                  final evidence =
-                      evidences[index];
-
-                  IconData icon;
-
-                  if (evidence.type == 'image') {
-                    icon = Icons.image;
-                  } else if (evidence.type == 'audio') {
-                    icon = Icons.audiotrack;
-                  } else {
-                    icon = Icons.insert_drive_file;
-                  }
-
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      icon,
-                      color:
-                          const Color(0xFFC9A227),
-                    ),
-                    title: Text(
-                      evidence.name,
-                      maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.redAccent,
-                      ),
-                      onPressed: () =>
-                          removeEvidence(index),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ثبت بازرسی جدید'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            AppTextField(
-              controller: dateController,
-              label: 'تاریخ شمسی',
-              icon: Icons.calendar_month,
-            ),
-
-            AppTextField(
-              controller: agentCodeController,
-              label: 'کد عامل *',
-              icon: Icons.numbers,
-              keyboardType:
-                  TextInputType.number,
-            ),
-
-            AppTextField(
-              controller: agentNameController,
-              label: 'نام عامل',
-              icon: Icons.store,
-            ),
-
-            AppTextField(
-              controller: cityController,
-              label: 'شهر',
-              icon: Icons.location_city,
-            ),
-
-            AppTextField(
-              controller: problemsController,
-              label: 'شرح مشکلات',
-              icon: Icons.warning,
-              maxLines: 5,
-            ),
-
-            evidenceSection(),
-
-            const SizedBox(height: 4),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed:
-                    saving ? null : save,
-                icon: saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(
-                  saving
-                      ? 'در حال ذخیره...'
-                      : 'ثبت بازرسی',
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// فیلد
-// =====================================================
-
-class AppTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final int maxLines;
-
-  const AppTextField({
-    super.key,
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding:
-          const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border:
-              const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// بایگانی
-// =====================================================
-
-class ArchivePage extends StatefulWidget {
-  const ArchivePage({super.key});
-
-  @override
-  State<ArchivePage> createState() => _ArchivePageState();
-}
-
-class _ArchivePageState extends State<ArchivePage> {
-  List<Inspection> inspections = [];
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    try {
-      final data = await AppStorage.getInspections();
-      if (!mounted) return;
-      setState(() {
-        inspections = data;
-        loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        inspections = [];
-        loading = false;
-      });
-    }
-  }
-
-  String normalizeDigits(String value) {
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const arabic = '٠١٢٣٤٥٦٧٨٩';
-    const english = '0123456789';
-    var result = value;
-    for (var i = 0; i < 10; i++) {
-      result = result.replaceAll(persian[i], english[i]);
-      result = result.replaceAll(arabic[i], english[i]);
-    }
-    return result;
-  }
-
-  String getMonth(String date) {
-    final parts = date.trim().split('/');
-    if (parts.length < 2) return '';
-    final year = normalizeDigits(parts[0]);
-    final month = normalizeDigits(parts[1]).padLeft(2, '0');
-    if (year.isEmpty || month.isEmpty) return '';
-    return '$year/$month';
-  }
-
-  int monthSortKey(String month) {
-    final parts = month.split('/');
-    if (parts.length != 2) return 0;
-    final year = int.tryParse(parts[0]) ?? 0;
-    final monthNumber = int.tryParse(parts[1]) ?? 0;
-    return (year * 100) + monthNumber;
-  }
-
-  String monthTitle(String month) {
-    final parts = month.split('/');
-    if (parts.length != 2) return month;
-    final year = parts[0];
-    final monthNumber = int.tryParse(parts[1]) ?? 0;
-    const names = [
-      '',
-      'فروردین',
-      'اردیبهشت',
-      'خرداد',
-      'تیر',
-      'مرداد',
-      'شهریور',
-      'مهر',
-      'آبان',
-      'آذر',
-      'دی',
-      'بهمن',
-      'اسفند',
-    ];
-    if (monthNumber >= 1 && monthNumber <= 12) {
-      return '${names[monthNumber]} $year';
-    }
-    return month;
-  }
-
-  List<String> get months {
-    final result = inspections
-        .map((item) => getMonth(item.date))
-        .where((month) => month.isNotEmpty)
-        .toSet()
-        .toList();
-    result.sort(
-      (a, b) => monthSortKey(b).compareTo(monthSortKey(a)),
-    );
-    return result;
-  }
-
-  int countForMonth(String month) {
-    return inspections.where(
-      (item) => getMonth(item.date) == month,
-    ).length;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('بایگانی'),
-        actions: [
-          IconButton(
-            tooltip: 'بازرسی‌های تکراری',
-            icon: const Icon(Icons.repeat),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => RepeatedInspectionsPage(
-                    inspections: inspections,
-                  ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'جستجو با تاریخ',
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DateArchiveSearchPage(
-                    inspections: inspections,
-                  ),
-                ),
-              );
-            },
-          ),
-          IconButton(
-            tooltip: 'جستجوی کد عامل',
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => SearchArchivePage(
-                    inspections: inspections,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : months.isEmpty
-              ? const Center(
-                  child: Text(
-                    'هنوز هیچ بازرسی ثبت نشده است',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: months.length,
-                  itemBuilder: (context, index) {
-                    final month = months[index];
-                    final count = countForMonth(month);
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.folder,
-                          color: Color(0xFFC9A227),
-                          size: 32,
-                        ),
-                        title: Text(
-                          monthTitle(month),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text('$count بازرسی'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => MonthArchivePage(
-                                month: month,
-                                monthTitleText: monthTitle(month),
-                                inspections: inspections,
-                              ),
-                            ),
-                          );
-                          await load();
-                        },
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-}
-
-// =====================================================
-// بایگانی یک ماه
-// =====================================================
-
-class MonthArchivePage extends StatefulWidget {
-  final String month;
-  final String monthTitleText;
-  final List<Inspection> inspections;
-
-  const MonthArchivePage({
-    super.key,
-    required this.month,
-    required this.monthTitleText,
-    required this.inspections,
-  });
-
-  @override
-  State<MonthArchivePage> createState() => _MonthArchivePageState();
-}
-
-class _MonthArchivePageState extends State<MonthArchivePage> {
-  List<Inspection> inspections = [];
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final data = await AppStorage.getInspections();
-    if (!mounted) return;
-    setState(() {
-      inspections = data;
-      loading = false;
-    });
-  }
-
-  String normalizeDigits(String value) {
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const arabic = '٠١٢٣٤٥٦٧٨٩';
-    const english = '0123456789';
-    var result = value;
-    for (var i = 0; i < 10; i++) {
-      result = result.replaceAll(persian[i], english[i]);
-      result = result.replaceAll(arabic[i], english[i]);
-    }
-    return result;
-  }
-
-  String getMonth(String date) {
-    final parts = date.trim().split('/');
-    if (parts.length < 2) return '';
-    return '${normalizeDigits(parts[0])}/${normalizeDigits(parts[1]).padLeft(2, '0')}';
-  }
-
-  String getDay(String date) {
-    final parts = date.trim().split('/');
-    if (parts.length < 3) return date;
-    return normalizeDigits(parts[2]).padLeft(2, '0');
-  }
-
-  int daySortKey(String date) {
-    final parts = date.split('/');
-    if (parts.length < 3) return 0;
-    final year = int.tryParse(parts[0]) ?? 0;
-    final monthNumber = int.tryParse(parts[1]) ?? 0;
-    final day = int.tryParse(parts[2]) ?? 0;
-    return (year * 10000) + (monthNumber * 100) + day;
-  }
-
-  List<String> get dates {
-    final result = inspections
-        .where((item) => getMonth(item.date) == widget.month)
-        .map((item) => item.date)
-        .where((date) => date.isNotEmpty)
-        .toSet()
-        .toList();
-    result.sort(
-      (a, b) => daySortKey(b).compareTo(daySortKey(a)),
-    );
-    return result;
-  }
-
-  int countForDate(String date) {
-    return inspections.where((item) => item.date == date).length;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.monthTitleText)),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : dates.isEmpty
-          ? const Center(
-              child: Text('در این ماه بازرسی‌ای ثبت نشده است'),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: dates.length,
-              itemBuilder: (context, index) {
-                final date = dates[index];
-                final count = countForDate(date);
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.calendar_month,
-                      color: Color(0xFFC9A227),
-                      size: 30,
-                    ),
-                    title: Text(
-                      'روز ${getDay(date)}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text('$date  •  $count بازرسی'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DailyArchivePage(
-                            date: date,
-                            inspections: inspections,
-                          ),
-                        ),
-                      );
-                      await _load();
-                    },
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-// =====================================================
-// بازرسی‌های یک روز
-// =====================================================
-
-class DailyArchivePage extends StatefulWidget {
-  final String date;
-  final List<Inspection> inspections;
-  final String? city;
-
-  const DailyArchivePage({
-    super.key,
-    required this.date,
-    required this.inspections,
-    this.city,
-  });
-
-  @override
-  State<DailyArchivePage> createState() => _DailyArchivePageState();
-}
-
-class _DailyArchivePageState extends State<DailyArchivePage> {
-  final searchController = TextEditingController();
-  List<Inspection> inspections = [];
-  bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final data = await AppStorage.getInspections();
-    if (!mounted) return;
-    setState(() {
-      inspections = data;
-      loading = false;
-    });
-  }
-
-  String _normalizeDate(String value) {
-    const p = '۰۱۲۳۴۵۶۷۸۹';
-    const a = '٠١٢٣٤٥٦٧٨٩';
-    const e = '0123456789';
-    var v = value.trim();
-    for (var i = 0; i < 10; i++) {
-      v = v.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
-    }
-    final parts = v.split('/');
-    if (parts.length != 3) return v;
-    return '${parts[0].padLeft(4, '0')}/${parts[1].padLeft(2, '0')}/${parts[2].padLeft(2, '0')}';
-  }
-
-  List<Inspection> get dailyInspections {
-    var result = inspections.where((item) {
-      final sameDate = _normalizeDate(item.date) == _normalizeDate(widget.date);
-      final sameCity = widget.city == null || item.city.trim() == widget.city!.trim();
-      return sameDate && sameCity;
-    }).toList();
-
-    final search = searchController.text.trim();
-    if (search.isNotEmpty) {
-      result = result.where((item) =>
-        item.agentCode.contains(search) ||
-        item.agentName.contains(search) ||
-        item.city.contains(search)
-      ).toList();
-    }
-    return result;
-  }
-
-  Map<String, List<Inspection>> _repeatedGroups(List<Inspection> data) {
-    final groups = <String, List<Inspection>>{};
-    for (final item in data) {
-      final code = item.agentCode.trim();
-      if (code.isEmpty) continue;
-      groups.putIfAbsent(code, () => []).add(item);
-    }
-    groups.removeWhere((_, value) => value.length < 2);
-    return groups;
-  }
-
-
-  @override
-  void dispose() {
-    searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final data = dailyInspections;
-    final repeated = _repeatedGroups(data);
-    final repeatedInspections = repeated.values.fold<int>(0, (sum, list) => sum + list.length);
-    final title = widget.city == null ? widget.date : '${widget.city} - ${widget.date}';
-
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: searchController,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'جستجوی کد، نام عامل یا شهر',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text('تعداد بازرسی: ${data.length}')),
-                    Expanded(child: Text('تعداد مشکلات: ${data.where((e) => e.problems.trim().isNotEmpty).length}')),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(child: Text('عوامل تکراری: ${repeated.length}')),
-                    Expanded(child: Text('بازرسی‌های تکراری: $repeatedInspections')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: data.isEmpty
-                ? const Center(child: Text('بازرسی‌ای برای این تاریخ پیدا نشد'))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: data.length,
-                    itemBuilder: (context, index) {
-                      final item = data[index];
-                      return Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFC9A227),
-                            child: Icon(Icons.assignment, color: Colors.black),
-                          ),
-                          title: Text(item.agentCode),
-                          subtitle: Text(
-                            '${item.agentName.isEmpty ? 'بدون نام' : item.agentName}\n'
-                            '${item.city.isEmpty ? 'بدون شهر' : item.city}\n'
-                            '${item.problems.isEmpty ? 'بدون مشکل' : 'دارای مشکل'}',
-                          ),
-                          isThreeLine: true,
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () async {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => InspectionDetailsPage(inspection: item)),
-                            );
-                            await _load();
-                          },
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =====================================================
-// جستجوی بایگانی بر اساس تاریخ
-// =====================================================
-class DateArchiveSearchPage extends StatefulWidget {
-  final List<Inspection> inspections;
-
-  const DateArchiveSearchPage({
-    super.key,
-    required this.inspections,
-  });
-
-  @override
-  State<DateArchiveSearchPage> createState() => _DateArchiveSearchPageState();
-}
-
-class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
-  final dateController = TextEditingController();
-  String searchedDate = '';
-
-  String normalizeDate(String value) {
-    const p = '۰۱۲۳۴۵۶۷۸۹';
-    const a = '٠١٢٣٤٥٦٧٨٩';
-    const e = '0123456789';
-    var v = value.trim();
-    for (var i = 0; i < 10; i++) v = v.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
-    final parts = v.split('/');
-    if (parts.length != 3) return v;
-    return '${parts[0].padLeft(4, '0')}/${parts[1].padLeft(2, '0')}/${parts[2].padLeft(2, '0')}';
-  }
-
-  String toPersian(String value) => toPersianDigits(value);
-
-  List<Inspection> get results {
-    if (searchedDate.isEmpty) return [];
-    final target = normalizeDate(searchedDate);
-    return widget.inspections.where((item) => normalizeDate(item.date) == target).toList();
-  }
-
-  Map<String, List<Inspection>> get cityGroups {
-    final map = <String, List<Inspection>>{};
-    for (final item in results) {
-      final city = item.city.trim().isEmpty ? 'بدون شهر' : item.city.trim();
-      map.putIfAbsent(city, () => []).add(item);
-    }
-    return map;
-  }
-
-  Map<String, List<Inspection>> get repeatedGroups {
-    final map = <String, List<Inspection>>{};
-    for (final item in results) {
-      final code = item.agentCode.trim();
-      if (code.isEmpty) continue;
-      map.putIfAbsent(code, () => []).add(item);
-    }
-    map.removeWhere((_, value) => value.length < 2);
-    return map;
-  }
-
-  int get repeatedInspectionCount => repeatedGroups.values.fold<int>(0, (sum, list) => sum + list.length);
-
-  Future<void> pickDate() async {
-    final initial = AppSettings.todayJalali().split('/');
-    var year = int.tryParse(initial[0]) ?? 1405;
-    var month = int.tryParse(initial[1]) ?? 1;
-    var day = int.tryParse(initial[2]) ?? 1;
-
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
-          if (day > maxDay) day = maxDay;
-          return AlertDialog(
-            title: const Text('انتخاب تاریخ شمسی'),
-            content: Row(
-              children: [
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: day,
-                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
-                  onChanged: (v) => setDialogState(() => day = v ?? day),
-                  decoration: const InputDecoration(labelText: 'روز'),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: month,
-                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
-                  onChanged: (v) => setDialogState(() => month = v ?? month),
-                  decoration: const InputDecoration(labelText: 'ماه'),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: DropdownButtonFormField<int>(
-                  value: year,
-                  items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
-                  onChanged: (v) => setDialogState(() => year = v ?? year),
-                  decoration: const InputDecoration(labelText: 'سال'),
-                )),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(dialogContext, '${year.toString().padLeft(4, '0')}/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}'),
-                child: const Text('تأیید'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (picked != null) {
-      dateController.text = picked;
-      setState(() => searchedDate = picked);
-    }
-  }
-
-  @override
-  void dispose() {
-    dateController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final groups = cityGroups;
-    final repeated = repeatedGroups;
-    return Scaffold(
-      appBar: AppBar(title: const Text('جستجوی بایگانی با تاریخ')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            children: [
-              Expanded(child: TextField(
-                controller: dateController,
-                keyboardType: TextInputType.datetime,
-                onSubmitted: (value) => setState(() => searchedDate = value),
-                decoration: const InputDecoration(
-                  labelText: 'تاریخ شمسی (مثلاً 1/6/1405)',
-                  hintText: '1405/06/01',
-                  prefixIcon: Icon(Icons.event),
-                  border: OutlineInputBorder(),
-                ),
-              )),
-              const SizedBox(width: 8),
-              IconButton.filled(tooltip: 'انتخاب تاریخ', onPressed: pickDate, icon: const Icon(Icons.calendar_month)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ElevatedButton.icon(
-            onPressed: () => setState(() => searchedDate = dateController.text),
-            icon: const Icon(Icons.search),
-            label: const Text('جستجو'),
-          ),
-          if (searchedDate.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            Text('نتیجه برای تاریخ ${toPersian(normalizeDate(searchedDate))}', style: const TextStyle(color: Color(0xFFC9A227), fontSize: 19, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            if (results.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(18), child: Text('برای این تاریخ بازرسی‌ای ثبت نشده است.')))
-            else ...[
-              Row(children: [
-                Expanded(child: _summaryCard('کل بازرسی', '${results.length}', Icons.assignment)),
-                const SizedBox(width: 8),
-                Expanded(child: _summaryCard('کل مشکلات', '${results.where((e) => e.problems.trim().isNotEmpty).length}', Icons.warning_amber)),
-              ]),
-              const SizedBox(height: 8),
-              Row(children: [
-                Expanded(child: _summaryCard('عوامل تکراری', '${repeated.length}', Icons.repeat)),
-                const SizedBox(width: 8),
-                Expanded(child: _summaryCard('بازرسی‌های تکراری', '$repeatedInspectionCount', Icons.autorenew)),
-              ]),
-              const SizedBox(height: 12),
-              const Text('محل‌های بازرسی', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ...groups.entries.map((entry) {
-                final data = entry.value;
-                final problemCount = data.where((e) => e.problems.trim().isNotEmpty).length;
-                final cityRepeated = <String, int>{};
-                for (final item in data) cityRepeated[item.agentCode] = (cityRepeated[item.agentCode] ?? 0) + 1;
-                final repeatedCount = cityRepeated.values.where((v) => v >= 2).length;
-                return Card(
-                  color: const Color(0xFF101B2E),
-                  child: ListTile(
-                    leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
-                    title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('تعداد بازرسی: ${data.length}  •  تعداد مشکلات: $problemCount  •  عوامل تکراری: $repeatedCount'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => DailyArchivePage(date: normalizeDate(searchedDate), city: entry.key == 'بدون شهر' ? '' : entry.key, inspections: widget.inspections)));
-                      setState(() {});
-                    },
-                  ),
-                );
-              }),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryCard(String title, String value, IconData icon) {
-    return Card(
-      color: const Color(0xFF101B2E),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(children: [
-          Icon(icon, color: const Color(0xFFC9A227), size: 30),
-          const SizedBox(height: 6),
-          Text(title, textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Color(0xFFC9A227), fontSize: 24, fontWeight: FontWeight.bold)),
-        ]),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// جزئیات بازرسی
-// =====================================================
-
-class InspectionDetailsPage extends StatefulWidget {
-  final Inspection inspection;
-
-  const InspectionDetailsPage({
-    super.key,
-    required this.inspection,
-  });
-
-  @override
-  State<InspectionDetailsPage> createState() => _InspectionDetailsPageState();
-}
-
-class _InspectionDetailsPageState extends State<InspectionDetailsPage> {
-  late Inspection current;
-
-  @override
-  void initState() {
-    super.initState();
-    current = widget.inspection;
-  }
-
-  Future<void> editInspection() async {
-    final result = await Navigator.push<Inspection>(
+  String _normalizeCode(String value) => value.trim().replaceAll(' ', '');
+
+  int _dateKey(String date) {
+    final p = date.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
+      const fa = '۰۱۲۳۴۵۶۷۸۹';
+      const ar = '٠١٢٣٤٥٦٧٨٩';
+      const en = '0123456789';
+      final c = m.group(0)!;
+      final i = fa.indexOf(c);
+      if (i >= 0) return en[i];
+      final j = ar.indexOf(c);
+      return j >= 0 ? en[j] : c;
+    }).split('/');
+    if (p.length != 3) return 0;
+    return (int.tryParse(p[0]) ?? 0) * 10000 +
+        (int.tryParse(p[1]) ?? 0) * 100 +
+        (int.tryParse(p[2]) ?? 0);
+  }
+
+  void _search() {
+    final code = _normalizeCode(_codeController.text);
+    final filtered = code.isEmpty
+        ? <Inspection>[]
+        : _all.where((x) => _normalizeCode(x.agentCode) == code).toList();
+    filtered.sort((a, b) => _dateKey(b.date).compareTo(_dateKey(a.date)));
+    setState(() => _results = filtered);
+  }
+
+  int get _problemCount => _results.where((x) => x.problems.trim().isNotEmpty).length;
+
+  Future<void> _edit(Inspection item) async {
+    final updated = await Navigator.push<Inspection>(
       context,
-      MaterialPageRoute(
-        builder: (_) => EditInspectionPage(inspection: current),
-      ),
+      MaterialPageRoute(builder: (_) => EditInspectionPage(inspection: item)),
     );
-
-    if (result == null) return;
-
-    // ذخیره نهایی با شناسه اصلی؛ بنابراین کد/نام/شهر/تاریخ هر تغییری داشته باشد
-    // همان پرونده قبلی به‌روزرسانی می‌شود و رکورد جدید ساخته نمی‌شود.
-    await AppStorage.updateInspection(result);
-
+    if (updated == null) return;
+    await AppStorage.updateInspection(updated);
+    await _load();
     if (!mounted) return;
-    setState(() => current = result);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('اطلاعات با موفقیت ویرایش و ذخیره شد.')),
     );
   }
 
-  Future<void> deleteInspection() async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _delete(Inspection item) async {
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف پرونده'),
-        content: const Text('آیا از حذف کامل این پرونده بازرسی مطمئن هستید؟ این عمل قابل برگشت نیست.'),
+      builder: (_) => AlertDialog(
+        title: const Text('حذف بازرسی'),
+        content: Text('آیا از حذف بازرسی عامل ${item.agentCode} در تاریخ ${item.date} مطمئن هستید؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
           ElevatedButton(
@@ -2954,1576 +881,144 @@ class _InspectionDetailsPageState extends State<InspectionDetailsPage> {
         ],
       ),
     );
-
-    if (confirmed != true) return;
-    await AppStorage.deleteInspection(current.id);
+    if (ok != true) return;
+    await AppStorage.deleteInspection(item.id);
+    await _load();
     if (!mounted) return;
-    Navigator.pop(context, true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('جزئیات بازرسی'),
-        actions: [
-          IconButton(
-            tooltip: 'ویرایش',
-            icon: const Icon(Icons.edit),
-            onPressed: editInspection,
-          ),
-          IconButton(
-            tooltip: 'حذف',
-            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-            onPressed: deleteInspection,
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          InfoCard(title: 'کد عامل', value: current.agentCode),
-          InfoCard(title: 'نام عامل', value: current.agentName.isEmpty ? 'ثبت نشده' : current.agentName),
-          InfoCard(title: 'شهر', value: current.city.isEmpty ? 'ثبت نشده' : current.city),
-          InfoCard(title: 'تاریخ', value: current.date),
-          InfoCard(title: 'شرح مشکلات', value: current.problems.isEmpty ? 'ثبت نشده' : current.problems),
-          const SizedBox(height: 10),
-          EvidenceViewer(evidences: current.evidences),
-        ],
-      ),
-    );
-  }
-}
-
-class EditInspectionPage extends StatefulWidget {
-  final Inspection inspection;
-
-  const EditInspectionPage({
-    super.key,
-    required this.inspection,
-  });
-
-  @override
-  State<EditInspectionPage> createState() => _EditInspectionPageState();
-}
-
-class _EditInspectionPageState extends State<EditInspectionPage> {
-  late final TextEditingController dateController;
-  late final TextEditingController codeController;
-  late final TextEditingController nameController;
-  late final TextEditingController cityController;
-  late final TextEditingController problemsController;
-
-  @override
-  void initState() {
-    super.initState();
-    dateController = TextEditingController(text: widget.inspection.date);
-    codeController = TextEditingController(text: widget.inspection.agentCode);
-    nameController = TextEditingController(text: widget.inspection.agentName);
-    cityController = TextEditingController(text: widget.inspection.city);
-    problemsController = TextEditingController(text: widget.inspection.problems);
-  }
-
-  @override
-  void dispose() {
-    dateController.dispose();
-    codeController.dispose();
-    nameController.dispose();
-    cityController.dispose();
-    problemsController.dispose();
-    super.dispose();
-  }
-
-  Widget field(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        maxLines: maxLines,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-
-  void save() {
-    final updated = widget.inspection.copyWith(
-      date: dateController.text.trim(),
-      agentCode: codeController.text.trim(),
-      agentName: nameController.text.trim(),
-      city: cityController.text.trim(),
-      problems: problemsController.text.trim(),
-    );
-    Navigator.pop(context, updated);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ویرایش پرونده عامل')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          field('تاریخ شمسی', dateController, Icons.calendar_month),
-          field('کد عامل', codeController, Icons.numbers),
-          field('نام عامل', nameController, Icons.person),
-          field('شهر محل بازرسی', cityController, Icons.location_city),
-          field('شرح مشکلات', problemsController, Icons.warning_amber, maxLines: 5),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: save,
-              icon: const Icon(Icons.save),
-              label: const Text('ذخیره تغییرات'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =====================================================
-// نمایش مستندات
-// =====================================================
-
-class EvidenceViewer
-    extends StatelessWidget {
-  final List<EvidenceFile> evidences;
-
-  const EvidenceViewer({
-    super.key,
-    required this.evidences,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (evidences.isEmpty) {
-      return Card(
-        child: Padding(
-          padding:
-              const EdgeInsets.all(18),
-          child: Column(
-            children: const [
-              Icon(
-                Icons.attach_file,
-                size: 45,
-                color:
-                    Colors.white38,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'برای این بازرسی مستندی ثبت نشده است',
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Card(
-      color:
-          const Color(0xFF101B2E),
-      child: Padding(
-        padding:
-            const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(
-                  Icons.folder_special,
-                  color:
-                      Color(0xFFC9A227),
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'مستندات ثبت‌شده',
-                  style: TextStyle(
-                    color:
-                        Color(0xFFC9A227),
-                    fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            ...evidences.map(
-              (evidence) =>
-                  EvidenceTile(
-                evidence: evidence,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-Future<void> openEvidence(
-  BuildContext context,
-  EvidenceFile evidence,
-) async {
-  final path = evidence.path.trim();
-
-  if (path.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('مسیر مستند خالی است')),
-    );
-    return;
-  }
-
-  final file = File(path);
-
-  try {
-    if (!await file.exists()) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'فایل مستند پیدا نشد. ممکن است فایل حذف یا جابه‌جا شده باشد.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (evidence.type == 'image') {
-      if (!context.mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FullImagePage(
-            path: path,
-            title: evidence.name,
-          ),
-        ),
-      );
-      return;
-    }
-
-    final result = await OpenFilex.open(path);
-
-    if (!context.mounted) return;
-
-    final message = result.message.trim();
-    if (message.isNotEmpty &&
-        !message.toLowerCase().contains('done')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('باز کردن فایل موفق نبود: $message'),
-        ),
-      );
-    }
-  } catch (_) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'امکان باز کردن این مستند وجود ندارد. برنامه مناسب برای این نوع فایل را نصب کنید.',
-        ),
-      ),
-    );
-  }
-}
-
-class EvidenceTile extends StatelessWidget {
-  final EvidenceFile evidence;
-
-  const EvidenceTile({
-    super.key,
-    required this.evidence,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    IconData icon;
-
-    if (evidence.type == 'image') {
-      icon = Icons.image;
-    } else if (evidence.type == 'audio') {
-      icon = Icons.audiotrack;
-    } else {
-      icon = Icons.insert_drive_file;
-    }
-
-    return Card(
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: const Color(0xFFC9A227),
-        ),
-        title: Text(
-          evidence.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          evidence.type == 'image'
-              ? 'عکس — برای مشاهده لمس کنید'
-              : evidence.type == 'audio'
-                  ? 'فایل صوتی — برای پخش لمس کنید'
-                  : 'فایل — برای باز کردن لمس کنید',
-        ),
-        trailing: const Icon(Icons.open_in_new),
-        onTap: () => openEvidence(context, evidence),
-      ),
-    );
-  }
-}
-
-class FullImagePage extends StatelessWidget {
-  final String path;
-  final String title;
-
-  const FullImagePage({
-    super.key,
-    required this.path,
-    this.title = 'تصویر مستند',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final file = File(path);
-
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: FutureBuilder<bool>(
-          future: file.exists(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const CircularProgressIndicator();
-            }
-
-            if (snapshot.data != true) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'تصویر پیدا نشد یا فایل حذف شده است.',
-                  textAlign: TextAlign.center,
-                ),
-              );
-            }
-
-            return InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 5,
-              child: Image.file(
-                file,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'تصویر قابل نمایش نیست.',
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                },
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// اطلاعات
-// =====================================================
-
-class InfoCard
-    extends StatelessWidget {
-  final String title;
-  final String value;
-
-  const InfoCard({
-    super.key,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding:
-            const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style:
-                  const TextStyle(
-                color:
-                    Color(0xFFC9A227),
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(value),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// =====================================================
-// جستجوی بایگانی
-// =====================================================
-
-class SearchArchivePage
-    extends StatefulWidget {
-  final List<Inspection> inspections;
-
-  const SearchArchivePage({
-    super.key,
-    required this.inspections,
-  });
-
-  @override
-  State<SearchArchivePage> createState() =>
-      _SearchArchivePageState();
-}
-
-class _SearchArchivePageState
-    extends State<SearchArchivePage> {
-  final codeController =
-      TextEditingController();
-
-  List<Inspection> get results {
-    final code =
-        codeController.text.trim();
-
-    if (code.isEmpty) {
-      return [];
-    }
-
-    return widget.inspections
-        .where(
-          (item) =>
-              item.agentCode
-                  .contains(code),
-        )
-        .toList();
-  }
-
-  @override
-  void dispose() {
-    codeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final data = results;
-
-    return Scaffold(
-      appBar: AppBar(
-        title:
-            const Text('جستجوی بایگانی'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.all(16),
-            child: TextField(
-              controller:
-                  codeController,
-              onChanged: (_) =>
-                  setState(() {}),
-              keyboardType:
-                  TextInputType.number,
-              decoration:
-                  const InputDecoration(
-                labelText: 'کد عامل',
-                prefixIcon:
-                    Icon(Icons.numbers),
-                border:
-                    OutlineInputBorder(),
-              ),
-            ),
-          ),
-          Expanded(
-            child: data.isEmpty
-                ? const Center(
-                    child: Text(
-                      'کدی پیدا نشد',
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount:
-                        data.length,
-                    itemBuilder:
-                        (context, index) {
-                      final item =
-                          data[index];
-
-                      return Card(
-                        child: ListTile(
-                          title: Text(
-                            item.agentCode,
-                          ),
-                          subtitle:
-                              Text(
-                            '${item.date} - ${item.city}',
-                          ),
-                          trailing:
-                              const Icon(
-                            Icons.chevron_right,
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    InspectionDetailsPage(
-                                  inspection:
-                                      item,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-// =====================================================
-// بازرسی‌های تکراری - ماهانه
-// =====================================================
-
-class RepeatedInspectionsPage extends StatefulWidget {
-  final List<Inspection> inspections;
-
-  const RepeatedInspectionsPage({
-    super.key,
-    required this.inspections,
-  });
-
-  @override
-  State<RepeatedInspectionsPage> createState() =>
-      _RepeatedInspectionsPageState();
-}
-
-class _RepeatedInspectionsPageState
-    extends State<RepeatedInspectionsPage> {
-  String? selectedMonth;
-
-  // استخراج ماه از تاریخ شمسی
-  // مثال: ۱۴۰۵/۰۵/۲۰ -> ۱۴۰۵/۰۵
-  String getMonth(String date) {
-    final parts = date.split('/');
-
-    if (parts.length >= 2) {
-      return '${parts[0]}/${parts[1]}';
-    }
-
-    return date;
-  }
-
-  String persianMonthName(String month) {
-    final parts = month.split('/');
-
-    if (parts.length != 2) {
-      return month;
-    }
-final m = int.tryParse(
-      parts[1].replaceAllMapped(
-        RegExp(r'[۰-۹]'),
-        (match) {
-          const p = '۰۱۲۳۴۵۶۷۸۹';
-          return p.indexOf(match.group(0)!).toString();
-        },
-      ),
-    ) ??
-    0;
-
-    const names = [
-      '',
-      'فروردین',
-      'اردیبهشت',
-      'خرداد',
-      'تیر',
-      'مرداد',
-      'شهریور',
-      'مهر',
-      'آبان',
-      'آذر',
-      'دی',
-      'بهمن',
-      'اسفند',
-    ];
-
-    if (m >= 1 && m <= 12) {
-      return '${names[m]} ${parts[0]}';
-    }
-
-    return month;
-  }
-
-  List<String> get months {
-    final result = widget.inspections
-        .map((item) => getMonth(item.date))
-        .where((month) => month.isNotEmpty)
-        .toSet()
-        .toList();
-
-    result.sort((a, b) => b.compareTo(a));
-
-    return result;
-  }
-
-  Map<String, List<Inspection>> repeatedForMonth(
-    String month,
-  ) {
-    final Map<String, List<Inspection>> groups = {};
-
-    for (final item in widget.inspections) {
-      if (getMonth(item.date) != month) {
-        continue;
-      }
-
-      final code = item.agentCode.trim();
-
-      if (code.isEmpty) {
-        continue;
-      }
-
-      groups.putIfAbsent(code, () => []);
-      groups[code]!.add(item);
-    }
-
-    groups.removeWhere(
-      (key, value) => value.length < 2,
-    );
-
-    return groups;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (selectedMonth == null) {
-      return _buildMonthList(context);
-    }
-
-    final groups =
-        repeatedForMonth(selectedMonth!);
-
-    return _buildCodeList(
-      context,
-      groups,
-      selectedMonth!,
-    );
-  }
-
-  Widget _buildMonthList(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'بازرسی‌های تکراری',
-        ),
-      ),
-      body: months.isEmpty
-          ? const Center(
-              child: Text(
-                'هیچ بازرسی تکراری ثبت نشده است',
-                style: TextStyle(fontSize: 17),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: months.length,
-              itemBuilder: (context, index) {
-                final month = months[index];
-                final groups =
-                    repeatedForMonth(month);
-
-                final totalRepeated =
-                    groups.length;
-
-                return Card(
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor:
-                          Color(0xFFC9A227),
-                      child: Icon(
-                        Icons.repeat,
-                        color: Colors.black,
-                      ),
-                    ),
-                    title: Text(
-                      persianMonthName(month),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '$totalRepeated عامل تکراری',
-                    ),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                    ),
-                    onTap: () {
-                      setState(() {
-                        selectedMonth = month;
-                      });
-                    },
-                  ),
-                );
-              },
-            ),
-    );
-  }
-
-  Widget _buildCodeList(
-    BuildContext context,
-    Map<String, List<Inspection>> groups,
-    String month,
-  ) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'تکراری‌های ${persianMonthName(month)}',
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            setState(() {
-              selectedMonth = null;
-            });
-          },
-        ),
-      ),
-      body: groups.isEmpty
-          ? const Center(
-              child: Text(
-                'در این ماه بازرسی تکراری وجود ندارد',
-              ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Card(
-                    color: const Color(0xFF101B2E),
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'تعداد عوامل تکراری',
-                            style: TextStyle(
-                              fontSize: 17,
-                            ),
-                          ),
-                          Text(
-                            groups.length.toString(),
-                            style: const TextStyle(
-                              color:
-                                  Color(0xFFC9A227),
-                              fontSize: 28,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                Expanded(
-                  child: ListView.builder(
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 12,
-                    ),
-                    itemCount: groups.length,
-                    itemBuilder:
-                        (context, index) {
-                      final code =
-                          groups.keys.elementAt(index);
-
-                      final records =
-                          groups[code]!;
-
-                      return Card(
-                        child: ListTile(
-                          leading:
-                              const Icon(
-                            Icons.store,
-                            color:
-                                Color(0xFFC9A227),
-                          ),
-                          title: Text(
-                            code,
-                            style:
-                                const TextStyle(
-                              fontWeight:
-                                  FontWeight.bold,
-                              fontSize: 17,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '${records.length} بار در این ماه بازرسی شده',
-                          ),
-                          trailing:
-                              const Icon(
-                            Icons.chevron_right,
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    RepeatedDatesPage(
-                                  code: code,
-                                  records: records,
-                                  month: month,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-// =====================================================
-// تاریخ‌های بازرسی تکراری یک عامل
-// =====================================================
-
-class RepeatedDatesPage extends StatelessWidget {
-  final String code;
-  final List<Inspection> records;
-  final String month;
-
-  const RepeatedDatesPage({
-    super.key,
-    required this.code,
-    required this.records,
-    required this.month,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sortedRecords = [...records];
-
-    sortedRecords.sort(
-      (a, b) => a.date.compareTo(b.date),
-    );
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'کد عامل: $code',
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Card(
-            color: const Color(0xFF101B2E),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.repeat,
-                    size: 50,
-                    color: Color(0xFFC9A227),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'بازرسی‌های تکراری',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFC9A227),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'ماه: $month',
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'تعداد بازرسی: ${records.length}',
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          ...List.generate(
-            sortedRecords.length,
-            (index) {
-              final item = sortedRecords[index];
-
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        const Color(0xFFC9A227),
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    item.date,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
-                  ),
-                  subtitle: Text(
-                    item.agentName.isEmpty
-                        ? 'بدون نام عامل'
-                        : item.agentName,
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            InspectionDetailsPage(
-                          inspection: item,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-// =====================================================
-// صفحات فعلاً آماده توسعه
-// =====================================================
-
-class DailyPerformancePage extends StatefulWidget {
-  const DailyPerformancePage({super.key});
-
-  @override
-  State<DailyPerformancePage> createState() => _DailyPerformancePageState();
-}
-
-class _DailyPerformancePageState extends State<DailyPerformancePage> {
-  late final TextEditingController dateController;
-  List<Inspection> inspections = [];
-  bool loading = true;
-  bool exporting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    dateController = TextEditingController(
-      text: _normalizeDate(AppSettings.todayJalali()),
-    );
-    _loadInspections();
-  }
-
-  @override
-  void dispose() {
-    dateController.dispose();
-    super.dispose();
-  }
-
-  String _normalizeDate(String value) {
-    const p = '۰۱۲۳۴۵۶۷۸۹';
-    const a = '٠١٢٣٤٥٦٧٨٩';
-    const e = '0123456789';
-    var v = value.trim();
-    for (var i = 0; i < 10; i++) {
-      v = v.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
-    }
-    final parts = v.split('/');
-    if (parts.length != 3) return v;
-    return '${parts[0].padLeft(4, '0')}/${parts[1].padLeft(2, '0')}/${parts[2].padLeft(2, '0')}';
-  }
-
-  Future<void> _loadInspections() async {
-    try {
-      final data = await AppStorage.getInspections();
-      if (!mounted) return;
-      setState(() {
-        inspections = data;
-        loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        inspections = [];
-        loading = false;
-      });
-    }
-  }
-
-  List<Inspection> get dailyInspections {
-    final target = _normalizeDate(dateController.text);
-    if (target.isEmpty || target.split('/').length != 3) return [];
-    return inspections
-        .where((item) => _normalizeDate(item.date) == target)
-        .toList();
-  }
-
-  Map<String, List<Inspection>> get cityGroups {
-    final groups = <String, List<Inspection>>{};
-    for (final item in dailyInspections) {
-      final city = item.city.trim().isEmpty ? 'بدون شهر' : item.city.trim();
-      groups.putIfAbsent(city, () => []).add(item);
-    }
-    return groups;
-  }
-
-  int get problemCount =>
-      dailyInspections.where((item) => item.problems.trim().isNotEmpty).length;
-
-  Future<void> pickDate() async {
-    final initial = _normalizeDate(dateController.text).split('/');
-    final today = _normalizeDate(AppSettings.todayJalali()).split('/');
-    var year = int.tryParse(initial.isNotEmpty ? initial[0] : '') ??
-        int.tryParse(today[0]) ?? 1405;
-    var month = int.tryParse(initial.length > 1 ? initial[1] : '') ??
-        int.tryParse(today[1]) ?? 1;
-    var day = int.tryParse(initial.length > 2 ? initial[2] : '') ??
-        int.tryParse(today[2]) ?? 1;
-
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
-          if (day > maxDay) day = maxDay;
-          return AlertDialog(
-            title: const Text('انتخاب تاریخ شمسی'),
-            content: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: day,
-                    items: List.generate(maxDay, (i) => i + 1)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => day = v ?? day),
-                    decoration: const InputDecoration(labelText: 'روز'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: month,
-                    items: List.generate(12, (i) => i + 1)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => month = v ?? month),
-                    decoration: const InputDecoration(labelText: 'ماه'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: year,
-                    items: List.generate(21, (i) => year - 10 + i)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => year = v ?? year),
-                    decoration: const InputDecoration(labelText: 'سال'),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('انصراف'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(
-                  dialogContext,
-                  '${year.toString().padLeft(4, '0')}/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}',
-                ),
-                child: const Text('تأیید'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (picked != null) {
-      setState(() => dateController.text = picked);
-    }
-  }
-
-  void _showInvalidDate() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تاریخ را به صورت 1405/06/01 وارد کنید.')),
-    );
-  }
-
-  Future<void> _openAllInspections() async {
-    final records = dailyInspections;
-    if (records.isEmpty) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DailyArchivePage(
-          date: _normalizeDate(dateController.text),
-          inspections: inspections,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openProblems() async {
-    final records = dailyInspections
-        .where((item) => item.problems.trim().isNotEmpty)
-        .toList();
-    if (records.isEmpty) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProblemInspectionsPage(inspections: records),
-      ),
-    );
-  }
-
-  Future<void> _openCity(String city) async {
-    final targetCity = city == 'بدون شهر' ? '' : city;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DailyArchivePage(
-          date: _normalizeDate(dateController.text),
-          city: targetCity,
-          inspections: inspections,
-        ),
-      ),
+      const SnackBar(content: Text('بازرسی با موفقیت حذف شد.')),
     );
   }
 
   Future<void> _exportExcel() async {
-    if (exporting) return;
-    final records = dailyInspections;
-    if (records.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('برای این تاریخ بازرسی‌ای برای خروجی وجود ندارد.')),
-      );
-      return;
-    }
-
-    setState(() => exporting = true);
+    if (_results.isEmpty || _exporting) return;
+    setState(() => _exporting = true);
     try {
       final excel = Excel.createExcel();
-      final date = _normalizeDate(dateController.text);
-
-      final summary = excel['گزارش عملکرد روزانه'];
-      summary.appendRow([
-        TextCellValue('سامانه مدیریت بازرسی'),
-        TextCellValue(''),
-      ]);
-      summary.appendRow([
-        TextCellValue('گزارش عملکرد روزانه'),
-        TextCellValue(''),
-      ]);
-      summary.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue(date),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد کل بازرسی'),
-        IntCellValue(records.length),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد بازرسی دارای مشکل'),
-        IntCellValue(records.where((e) => e.problems.trim().isNotEmpty).length),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد بازرسی بدون مشکل'),
-        IntCellValue(records.where((e) => e.problems.trim().isEmpty).length),
-      ]);
+      final summary = excel['سوابق عامل'];
+      final first = _results.first;
+      summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
+      summary.appendRow([TextCellValue('کد عامل'), TextCellValue(first.agentCode)]);
+      summary.appendRow([TextCellValue('نام عامل'), TextCellValue(first.agentName)]);
+      summary.appendRow([TextCellValue('تعداد بازرسی'), IntCellValue(_results.length)]);
+      summary.appendRow([TextCellValue('تعداد بازرسی دارای مشکل'), IntCellValue(_problemCount)]);
+      summary.appendRow([TextCellValue('تاریخ‌های بازرسی'), TextCellValue(_results.map((x) => x.date).join(' ، '))]);
       summary.appendRow([TextCellValue('')]);
-      summary.appendRow([
-        TextCellValue('شهر'),
-        TextCellValue('تعداد بازرسی'),
-        TextCellValue('تعداد دارای مشکل'),
-      ]);
-      for (final entry in cityGroups.entries) {
+      summary.appendRow([TextCellValue('تاریخ'), TextCellValue('شهر'), TextCellValue('تعداد مشکلات'), TextCellValue('شرح مشکلات')]);
+      for (final item in _results) {
         summary.appendRow([
-          TextCellValue(entry.key),
-          IntCellValue(entry.value.length),
-          IntCellValue(entry.value.where((e) => e.problems.trim().isNotEmpty).length),
-        ]);
-      }
-
-      final details = excel['جزئیات بازرسی‌ها'];
-      details.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('شهر'),
-        TextCellValue('شرح مشکلات'),
-        TextCellValue('تعداد مستندات'),
-      ]);
-      for (final item in records) {
-        details.appendRow([
           TextCellValue(item.date),
-          TextCellValue(item.agentCode),
-          TextCellValue(item.agentName),
-          TextCellValue(item.city),
+          TextCellValue(item.city.isEmpty ? 'ثبت نشده' : item.city),
+          IntCellValue(item.problems.trim().isEmpty ? 0 : 1),
           TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems),
-          IntCellValue(item.evidences.length),
         ]);
       }
-
-      final problems = excel['بازرسی‌های دارای مشکل'];
-      problems.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('شهر'),
-        TextCellValue('شرح مشکلات'),
-      ]);
-      for (final item in records.where((e) => e.problems.trim().isNotEmpty)) {
-        problems.appendRow([
-          TextCellValue(item.date),
-          TextCellValue(item.agentCode),
-          TextCellValue(item.agentName),
-          TextCellValue(item.city),
-          TextCellValue(item.problems),
-        ]);
+      final details = excel['جزئیات کامل'];
+      details.appendRow([TextCellValue('شناسه'), TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات')]);
+      for (final item in _results) {
+        details.appendRow([TextCellValue(item.id), TextCellValue(item.date), TextCellValue(item.agentCode), TextCellValue(item.agentName), TextCellValue(item.city), TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems)]);
       }
-
       final bytes = excel.save();
-      if (bytes == null || bytes.isEmpty) {
-        throw Exception('فایل Excel خالی است');
-      }
-
-      final dir = await getExportDirectory();
-      final safeDate = date.replaceAll('/', '-');
-      final file = File(
-        '${dir.path}/گزارش_عملکرد_روزانه_$safeDate.xlsx',
+      if (bytes == null || bytes.isEmpty) throw Exception('ساخت فایل Excel ناموفق بود');
+      final path = await previewThenSaveExportFile(
+        bytes: bytes,
+        fileName: 'سوابق_عامل_${first.agentCode}_${DateTime.now().millisecondsSinceEpoch}.xlsx',
       );
-      await file.writeAsBytes(bytes, flush: true);
-
-      final result = await OpenFilex.open(file.path);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.type == ResultType.done
-                ? 'گزارش Excel ذخیره شد و برای مشاهده باز شد.'
-                : 'گزارش Excel در حافظه گوشی ذخیره شد. از پوشه Download می‌توانید آن را باز یا چاپ کنید.',
-          ),
-        ),
+        SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل Excel ساخته، باز و سپس در حافظه گوشی ذخیره شد.')),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطا در ساخت گزارش Excel: $e')),
-      );
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
     } finally {
-      if (mounted) setState(() => exporting = false);
+      if (mounted) setState(() => _exporting = false);
     }
-  }
-
-  Widget _summaryCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required VoidCallback? onTap,
-  }) {
-    return Card(
-      color: const Color(0xFF101B2E),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            children: [
-              Icon(icon, color: const Color(0xFFC9A227), size: 34),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                toPersianDigits(value),
-                style: const TextStyle(
-                  color: Color(0xFFC9A227),
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(height: 4),
-                const Text(
-                  'برای مشاهده لمس کنید',
-                  style: TextStyle(fontSize: 11, color: Colors.white60),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final records = dailyInspections;
-    final groups = cityGroups;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ثبت عملکرد روزانه'),
+        title: const Text('سوابق عامل'),
         actions: [
-          IconButton(
-            tooltip: 'خروجی Excel برای مدیر',
-            onPressed: exporting ? null : _exportExcel,
-            icon: exporting
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.table_chart),
-          ),
+          if (_results.isNotEmpty)
+            IconButton(
+              tooltip: 'خروجی Excel',
+              onPressed: _exporting ? null : _exportExcel,
+              icon: const Icon(Icons.table_chart),
+            ),
         ],
       ),
-      body: loading
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadInspections,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextField(
+                  controller: _codeController,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => _search(),
+                  decoration: InputDecoration(
+                    labelText: 'کد عامل را وارد کنید',
+                    hintText: 'مثلاً ۱۲۳۴۵',
+                    prefixIcon: const Icon(Icons.badge_outlined),
+                    suffixIcon: IconButton(onPressed: _search, icon: const Icon(Icons.search)),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (_codeController.text.trim().isNotEmpty && _results.isNotEmpty) ...[
                   Card(
                     color: const Color(0xFF101B2E),
                     child: Padding(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.all(16),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'تاریخ عملکرد',
-                            style: TextStyle(
-                              color: Color(0xFFC9A227),
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
+                          Text('عامل: ${_results.first.agentName.isEmpty ? _results.first.agentCode : _results.first.agentName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
                           Row(
                             children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: dateController,
-                                  keyboardType: TextInputType.datetime,
-                                  onSubmitted: (_) => setState(() {}),
-                                  decoration: const InputDecoration(
-                                    labelText: 'تاریخ شمسی',
-                                    hintText: '1405/06/06',
-                                    prefixIcon: Icon(Icons.event),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton.filled(
-                                tooltip: 'انتخاب تاریخ',
-                                onPressed: pickDate,
-                                icon: const Icon(Icons.calendar_month),
-                              ),
+                              Expanded(child: Text('تعداد بازرسی: ${toPersianDigits('${_results.length}')}')),
+                              Expanded(child: Text('تعداد مشکلات: ${toPersianDigits('$_problemCount')}')),
                             ],
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                final normalized = _normalizeDate(dateController.text);
-                                if (normalized.split('/').length != 3) {
-                                  _showInvalidDate();
-                                  return;
-                                }
-                                setState(() => dateController.text = normalized);
-                              },
-                              icon: const Icon(Icons.search),
-                              label: const Text('نمایش عملکرد این تاریخ'),
-                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'گزارش عملکرد ${toPersianDigits(_normalizeDate(dateController.text))}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFC9A227),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                  if (_exporting) const LinearProgressIndicator(),
+                  const SizedBox(height: 8),
+                  ..._results.map((item) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.assignment, color: Color(0xFFC9A227)),
+                      title: Text('تاریخ: ${item.date}'),
+                      subtitle: Text('شهر: ${item.city.isEmpty ? 'ثبت نشده' : item.city}\nمشکلات: ${item.problems.isEmpty ? 'بدون مشکل' : item.problems}'),
+                      isThreeLine: true,
+                      onTap: () async {
+                        await Navigator.push(context, MaterialPageRoute(builder: (_) => InspectionDetailsPage(inspection: item)));
+                        await _load();
+                      },
+                      trailing: Wrap(
+                        spacing: 0,
+                        children: [
+                          IconButton(tooltip: 'ویرایش', onPressed: () => _edit(item), icon: const Icon(Icons.edit)),
+                          IconButton(tooltip: 'حذف', onPressed: () => _delete(item), icon: const Icon(Icons.delete_outline, color: Colors.redAccent)),
+                        ],
+                      ),
                     ),
+                  )),
+                ] else if (_codeController.text.trim().isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(child: Text('برای این کد عامل سابقه‌ای پیدا نشد.')),
+                  )
+                else
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(child: Text('کد عامل را وارد کنید تا سوابق نمایش داده شود.')),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _summaryCard(
-                          title: 'کل بازرسی‌ها',
-                          value: '${records.length}',
-                          icon: Icons.assignment_turned_in,
-                          onTap: records.isEmpty ? null : _openAllInspections,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _summaryCard(
-                          title: 'بازرسی دارای مشکل',
-                          value: '$problemCount',
-                          icon: Icons.warning_amber_rounded,
-                          onTap: problemCount == 0 ? null : _openProblems,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (records.isEmpty)
-                    const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                          'برای این تاریخ هنوز بازرسی‌ای ثبت نشده است.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    )
-                  else ...[
-                    Card(
-                      color: const Color(0xFF101B2E),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'شهرهای محل بازرسی',
-                              style: TextStyle(
-                                color: Color(0xFFC9A227),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ...groups.entries.map((entry) {
-                              final cityProblems = entry.value
-                                  .where((e) => e.problems.trim().isNotEmpty)
-                                  .length;
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: const Icon(
-                                    Icons.location_city,
-                                    color: Color(0xFFC9A227),
-                                  ),
-                                  title: Text(
-                                    entry.key,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'بازرسی: ${toPersianDigits('${entry.value.length}')}  •  دارای مشکل: ${toPersianDigits('$cityProblems')}',
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _openCity(entry.key),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: exporting ? null : _exportExcel,
-                        icon: const Icon(Icons.table_chart),
-                        label: const Text('ساخت و باز کردن گزارش Excel برای مدیر'),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'فایل Excel در حافظه گوشی و پوشه Download ذخیره می‌شود و برای مشاهده، ارسال یا چاپ قابل استفاده است.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
+              ],
             ),
     );
   }
@@ -5073,94 +1568,161 @@ class _ReportsPageState extends State<ReportsPage> {
       final summary = excel['خلاصه گزارش'];
       summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
       summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue(_reportTitleForFile())]);
-      summary.appendRow([TextCellValue('کل بازرسی‌ها'), IntCellValue(records.length)]);
-      summary.appendRow([TextCellValue('دارای مشکل'), IntCellValue(_problemCount(records))]);
-      summary.appendRow([TextCellValue('بدون مشکل'), IntCellValue(records.length-_problemCount(records))]);
+      summary.appendRow([TextCellValue('تعداد کل بازرسی‌ها'), IntCellValue(records.length)]);
+      final problemCount = _problemCount(records);
+      summary.appendRow([TextCellValue('تعداد بازرسی‌های دارای مشکل'), IntCellValue(problemCount)]);
+      summary.appendRow([TextCellValue('تعداد بازرسی‌های بدون مشکل'), IntCellValue(records.length - problemCount)]);
       summary.appendRow([TextCellValue('درصد دارای مشکل'), DoubleCellValue(_problemPercent(records))]);
       summary.appendRow([TextCellValue('')]);
-      summary.appendRow([TextCellValue('نام عامل'), TextCellValue('کد عامل'), TextCellValue('تاریخ بازرسی')]);
+      summary.appendRow([TextCellValue('نام عامل'), TextCellValue('کد عامل'), TextCellValue('تاریخ بازرسی'), TextCellValue('شهر'), TextCellValue('شرح مشکلات')]);
       for (final item in records) {
-        summary.appendRow([TextCellValue(item.agentName), TextCellValue(item.agentCode), TextCellValue(item.date)]);
+        summary.appendRow([TextCellValue(item.agentName), TextCellValue(item.agentCode), TextCellValue(item.date), TextCellValue(item.city), TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems)]);
       }
+
       final citySheet = excel['مقایسه شهرها'];
-      citySheet.appendRow([TextCellValue('شهر'),TextCellValue('بازرسی'),TextCellValue('مشکل'),TextCellValue('درصد مشکل')]);
+      citySheet.appendRow([TextCellValue('شهر'), TextCellValue('تعداد بازرسی'), TextCellValue('تعداد دارای مشکل'), TextCellValue('درصد مشکل')]);
       final groups = _cityGroups(records);
+      final allCities = inspections.map((e) => e.city.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
       final cities = selectedCities.isEmpty ? (groups.keys.toList()..sort()) : (selectedCities.toList()..sort());
-      for (final city in cities) {
-        final data=groups[city] ?? <Inspection>[];
-        citySheet.appendRow([TextCellValue(city),IntCellValue(data.length),IntCellValue(_problemCount(data)),DoubleCellValue(_problemPercent(data))]);
+      final cityList = selectedCities.isEmpty ? cities : cities.where((c) => allCities.contains(c)).toList();
+      for (final city in cityList) {
+        final data = groups[city] ?? <Inspection>[];
+        citySheet.appendRow([TextCellValue(city), IntCellValue(data.length), IntCellValue(_problemCount(data)), DoubleCellValue(_problemPercent(data))]);
       }
+
       final details = excel['جزئیات بازرسی‌ها'];
-      details.appendRow([TextCellValue('تاریخ'),TextCellValue('کد عامل'),TextCellValue('نام عامل'),TextCellValue('شهر'),TextCellValue('شرح مشکلات')]);
+      details.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('تعداد مستندات')]);
       for (final item in records) {
-        details.appendRow([TextCellValue(item.date),TextCellValue(item.agentCode),TextCellValue(item.agentName),TextCellValue(item.city),TextCellValue(item.problems.isEmpty?'بدون مشکل':item.problems)]);
+        details.appendRow([TextCellValue(item.date), TextCellValue(item.agentCode), TextCellValue(item.agentName), TextCellValue(item.city), TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems), IntCellValue(item.evidences.length)]);
       }
+
       final repeated = excel['بازرسی‌های تکراری'];
-      repeated.appendRow([
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('تعداد بازرسی'),
-        TextCellValue('تاریخ‌های بازرسی'),
-      ]);
+      repeated.appendRow([TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('تعداد بازرسی'), TextCellValue('تاریخ‌های بازرسی')]);
       for (final e in _repeatedGroupsForPeriod().entries) {
-        final dates = [...e.value.map((x) => x.date)]..sort((a, b) => _dateKey(a).compareTo(_dateKey(b)));
-        final name = e.value.first.agentName;
-        repeated.appendRow([
-          TextCellValue(e.key),
-          TextCellValue(name),
-          IntCellValue(e.value.length),
-          TextCellValue(dates.join(' ، ')),
-        ]);
+        final dates = e.value.map((x) => x.date).toList()..sort((a, b) => _dateKey(a).compareTo(_dateKey(b)));
+        repeated.appendRow([TextCellValue(e.key), TextCellValue(e.value.first.agentName), IntCellValue(e.value.length), TextCellValue(dates.join(' ، '))]);
       }
+
       final bytes = excel.save();
-      if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
-      final fileName = 'گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
+      if (bytes == null || bytes.isEmpty) throw Exception('ساخت فایل Excel ناموفق بود');
+      final savedPath = await previewThenSaveExportFile(
+        bytes: bytes,
+        fileName: 'گزارش_بازرسی_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      );
       if (savedPath == null || savedPath.isEmpty) {
         _showExportMessage('ذخیره فایل لغو شد.');
         return;
       }
-      final result = await OpenFilex.open(savedPath);
-      if (mounted) _showExportMessage(result.type == ResultType.done ? 'فایل Excel در حافظه گوشی ذخیره شد.' : 'فایل Excel ذخیره شد.');
+      _showExportMessage('فایل Excel ابتدا باز شد و سپس در حافظه گوشی ذخیره شد.');
     } catch (e) {
-      if (mounted) _showExportMessage('خطا در ساخت Excel: $e');
-    } finally { if (mounted) setState(() => exporting=false); }
+      _showExportMessage('خطا در ساخت Excel: $e');
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
   }
 
   Future<void> _exportPdf() async {
     if (exporting) return;
     setState(() => exporting = true);
     try {
-      final doc = pw.Document();
       final records = _periodRecords;
+      final font = _buildPersianPdfFont();
+      final baseStyle = pw.TextStyle(font: font, fontSize: 9);
+      final titleStyle = pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
+      final headerStyle = pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold);
+      final doc = pw.Document();
       final groups = _cityGroups(records);
       final cities = selectedCities.isEmpty ? (groups.keys.toList()..sort()) : (selectedCities.toList()..sort());
-      doc.addPage(pw.MultiPage(pageFormat: PdfPageFormat.a4, build: (_) => [
-        pw.Text('Inspection Management Report', style: pw.TextStyle(fontSize:20,fontWeight:pw.FontWeight.bold)),
-        pw.SizedBox(height:10),
-        pw.Text('Report period: ${_reportTitleForFile()}'),
-        pw.Text('Total inspections: ${records.length}'),
-        pw.Text('Inspections with problems: ${_problemCount(records)}'),
-        pw.Text('Problem percentage: ${_problemPercent(records).toStringAsFixed(1)}%'),
-        pw.SizedBox(height:15),
-        pw.Text('Selected cities'),
-        if (cities.isNotEmpty) pw.Table.fromTextArray(headers:['City','Inspections','Problems','Problem %'], data:cities.map((city){final d=groups[city]??<Inspection>[];return [city,'${d.length}','${_problemCount(d)}','${_problemPercent(d).toStringAsFixed(1)}%'];}).toList()),
-        pw.SizedBox(height:15),
-        pw.Text('Inspection details'),
-        if (records.isNotEmpty) pw.Table.fromTextArray(headers:['Date','Agent code','Agent name','City','Problem'],data:records.map((x)=>[x.date,x.agentCode,x.agentName,x.city,x.problems.isEmpty?'No':x.problems]).toList(),cellStyle:const pw.TextStyle(fontSize:7)),
-      ]));
-      final bytes=await doc.save();
-      if(bytes.isEmpty) throw Exception('PDF file is empty');
-      final fileName='گزارش_مدیریتی_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final savedPath=await saveExportFileToPhone(bytes: bytes, fileName: fileName);
-      if(savedPath==null || savedPath.isEmpty){
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: pw.ThemeData.withFont(base: font),
+          header: (context) => pw.Container(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Text('سامانه مدیریت بازرسی', style: headerStyle),
+          ),
+          footer: (context) => pw.Align(
+            alignment: pw.Alignment.center,
+            child: pw.Text('صفحه ${context.pageNumber} از ${context.pagesCount}', style: pw.TextStyle(font: font, fontSize: 7)),
+          ),
+          build: (_) => [
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Text('گزارش بازرسی', style: titleStyle, textAlign: pw.TextAlign.center),
+                  pw.SizedBox(height: 8),
+                  pw.Text('بازه گزارش: ${_reportTitleForFile()}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('تعداد کل بازرسی‌ها: ${toPersianDigits('${records.length}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('بازرسی‌های دارای مشکل: ${toPersianDigits('${_problemCount(records)}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('بازرسی‌های بدون مشکل: ${toPersianDigits('${records.length - _problemCount(records)}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('درصد دارای مشکل: ${toPersianDigits(_problemPercent(records).toStringAsFixed(1))}٪', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 12),
+                  pw.Text('مقایسه شهرها', style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                  if (cities.isNotEmpty)
+                    pw.Directionality(
+                      textDirection: pw.TextDirection.rtl,
+                      child: pw.Table.fromTextArray(
+                        headers: ['شهر', 'بازرسی', 'مشکل', 'درصد مشکل'],
+                        data: cities.map((city) {
+                          final data = groups[city] ?? <Inspection>[];
+                          return [city, toPersianDigits('${data.length}'), toPersianDigits('${_problemCount(data)}'), '${toPersianDigits(_problemPercent(data).toStringAsFixed(1))}٪'];
+                        }).toList(),
+                        headerStyle: headerStyle,
+                        cellStyle: pw.TextStyle(font: font, fontSize: 7),
+                        cellAlignment: pw.Alignment.centerRight,
+                        headerAlignment: pw.Alignment.centerRight,
+                      ),
+                    ),
+                  pw.SizedBox(height: 14),
+                  pw.Text('جزئیات بازرسی‌ها', style: pw.TextStyle(font: font, fontSize: 12, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                  if (records.isNotEmpty)
+                    pw.Directionality(
+                      textDirection: pw.TextDirection.rtl,
+                      child: pw.Table.fromTextArray(
+                        headers: ['تاریخ', 'کد عامل', 'نام عامل', 'شهر', 'مشکلات'],
+                        data: records.map((item) => [
+                          item.date,
+                          item.agentCode,
+                          item.agentName,
+                          item.city,
+                          item.problems.isEmpty ? 'بدون مشکل' : item.problems,
+                        ]).toList(),
+                        headerStyle: headerStyle,
+                        cellStyle: pw.TextStyle(font: font, fontSize: 6),
+                        cellAlignment: pw.Alignment.centerRight,
+                        headerAlignment: pw.Alignment.centerRight,
+                      ),
+                    ),
+                  pw.SizedBox(height: 18),
+                  pw.Text('نام بازرس: ${AppSettings.inspectorName}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 25),
+                  pw.Text('امضا: ................................................', style: baseStyle, textAlign: pw.TextAlign.right),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final bytes = await doc.save();
+      if (bytes.isEmpty) throw Exception('ساخت فایل PDF ناموفق بود');
+      final savedPath = await previewThenSaveExportFile(
+        bytes: bytes,
+        fileName: 'گزارش_بازرسی_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      if (savedPath == null || savedPath.isEmpty) {
         _showExportMessage('ذخیره فایل لغو شد.');
         return;
       }
-      final result=await OpenFilex.open(savedPath);
-      if(mounted) _showExportMessage(result.type==ResultType.done?'PDF در حافظه گوشی ذخیره شد.':'PDF ذخیره شد؛ برنامه PDF برای باز کردن آن پیدا نشد.');
-    } catch(e) { if(mounted) _showExportMessage('خطا در ساخت PDF: $e'); }
-    finally { if(mounted) setState(()=>exporting=false); }
+      _showExportMessage('فایل PDF فارسی ابتدا باز شد و سپس در حافظه گوشی ذخیره شد.');
+    } catch (e) {
+      _showExportMessage('خطا در ساخت PDF: $e');
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
   }
 
   Widget _exportButtons() {
