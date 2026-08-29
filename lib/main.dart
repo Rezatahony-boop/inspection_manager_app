@@ -446,6 +446,25 @@ Future<String?> saveExportFileToPhone({
   return path;
 }
 
+
+Future<String?> previewThenSaveExportFile({
+  required List<int> bytes,
+  required String fileName,
+}) async {
+  final tempDir = await getTemporaryDirectory();
+  final tempFile = File('${tempDir.path}/$fileName');
+  await tempFile.writeAsBytes(bytes, flush: true);
+
+  // ابتدا پیش‌نمایش/باز شدن خودکار فایل
+  await OpenFilex.open(tempFile.path);
+
+  // سپس ذخیره دائمی در حافظه گوشی
+  return saveExportFileToPhone(
+    bytes: bytes,
+    fileName: fileName,
+  );
+}
+
 Future<Directory> getExportDirectory() async {
   final publicDownload = Directory('/storage/emulated/0/Download');
   try {
@@ -875,7 +894,10 @@ class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
       }
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel خالی است');
-      final path = await saveExportFileToPhone(bytes: bytes, fileName: 'گزارش_مدیریتی_${start.replaceAll('/','-')}_تا_${end.replaceAll('/','-')}.xlsx');
+      final path = await previewThenSaveExportFile(
+        bytes: bytes,
+        fileName: 'گزارش_مدیریتی_${start.replaceAll('/','-')}_تا_${end.replaceAll('/','-')}.xlsx',
+      );
       if (path == null) return;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1034,7 +1056,6 @@ class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
                     cellStyle: baseStyle,
                     cellAlignment: pw.Alignment.centerRight,
                     headerAlignment: pw.Alignment.centerRight,
-                    textDirection: pw.TextDirection.rtl,
                   ),
                   pw.SizedBox(height: 18),
                   pw.Text(
@@ -1062,7 +1083,6 @@ class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
                     cellStyle: baseStyle,
                     cellAlignment: pw.Alignment.centerRight,
                     headerAlignment: pw.Alignment.centerRight,
-                    textDirection: pw.TextDirection.rtl,
                   ),
                   pw.SizedBox(height: 18),
                   pw.Text(
@@ -1140,7 +1160,7 @@ class _ManagementDashboardPageState extends State<ManagementDashboardPage> {
       );
 
       final bytes = await doc.save();
-      final path = await saveExportFileToPhone(
+      final path = await previewThenSaveExportFile(
         bytes: bytes,
         fileName: 'گزارش_مدیریتی_${startDate.replaceAll('/', '-')}_تا_${endDate.replaceAll('/', '-')}.pdf',
       );
