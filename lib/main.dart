@@ -1427,8 +1427,8 @@ class ManagementReportPreviewPage extends StatelessWidget {
       cities.putIfAbsent(i.city.trim().isEmpty ? 'بدون شهر' : i.city.trim(), () => []).add(i);
     }
     final reportCities = selectedCities.isEmpty
-        ? cities.keys.toList()..sort()
-        : selectedCities.toList()..sort();
+        ? (cities.keys.toList()..sort())
+        : (selectedCities.toList()..sort());
     for (final city in reportCities) {
       cities.putIfAbsent(city, () => <Inspection>[]);
     }
