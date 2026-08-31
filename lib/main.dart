@@ -334,7 +334,6 @@ Future<Directory> getEvidenceDirectory() async {
 // =====================================================
 // ورود
 // =====================================================
-
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -350,7 +349,7 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const DashboardPage(),
+          builder: (_) => const LoginAnimationPage(),
         ),
       );
     } else {
@@ -417,6 +416,72 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// =====================================================
+// پخش انیمیشن ورود
+// =====================================================
+
+class LoginAnimationPage extends StatefulWidget {
+  const LoginAnimationPage({super.key});
+
+  @override
+  State<LoginAnimationPage> createState() => _LoginAnimationPageState();
+}
+
+class _LoginAnimationPageState extends State<LoginAnimationPage> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = VideoPlayerController.asset(
+      'assets/login_animation.mp4',
+    );
+
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+
+      setState(() {});
+
+      _controller.play();
+
+      Future.delayed(const Duration(seconds: 3), () {
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const DashboardPage(),
+          ),
+        );
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: _controller.value.isInitialized
+            ? AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: VideoPlayer(_controller),
+              )
+            : const CircularProgressIndicator(
+                color: Color(0xFFC9A227),
+              ),
       ),
     );
   }
