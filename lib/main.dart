@@ -8,7 +8,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:video_player/video_player.dart';
 void main() {
   runApp(const InspectionManagerApp());
 }
