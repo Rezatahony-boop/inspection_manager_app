@@ -27,6 +27,7 @@ jobs:
         run: |
           cp lib/main.dart /tmp/flutter_project/lib/main.dart
           cp pubspec.yaml /tmp/flutter_project/pubspec.yaml
+          cp -r assets /tmp/flutter_project/assets
 
       - name: Configure Android
         working-directory: /tmp/flutter_project
