@@ -13,9 +13,7 @@ import 'package:excel/excel.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await AppSettings.load();
+void main() {
   runApp(const InspectionManagerApp());
 }
 
@@ -59,8 +57,6 @@ String toPersianDigits(String text) {
 
   return text;
 }
-
-String toPersian(String value) => toPersianDigits(value);
 
 String gregorianToJalali(DateTime date) {
   int gy = date.year;
@@ -259,87 +255,6 @@ class Inspection {
 }
 
 // =====================================================
-// تنظیمات سراسری برنامه
-// =====================================================
-
-class AppSettings {
-  static const _nameKey = 'inspector_name';
-  static const _passwordKey = 'app_password';
-  static const _dateKey = 'configured_jalali_date';
-  static const _timeKey = 'configured_time';
-  static const _profileKey = 'profile_image_path';
-
-  static SharedPreferences? _prefs;
-  static String inspectorName = 'رضا طاحونی';
-  static String password = '1234';
-  static String configuredDate = '';
-  static String configuredTime = '';
-  static String profileImagePath = '';
-
-  static Future<void> load() async {
-    _prefs = await SharedPreferences.getInstance();
-    inspectorName = _prefs!.getString(_nameKey) ?? 'رضا طاحونی';
-    password = _prefs!.getString(_passwordKey) ?? '1234';
-    configuredDate = _prefs!.getString(_dateKey) ?? '';
-    configuredTime = _prefs!.getString(_timeKey) ?? '';
-    profileImagePath = _prefs!.getString(_profileKey) ?? '';
-  }
-
-  static Future<void> setInspectorName(String value) async {
-    inspectorName = value.trim().isEmpty ? 'رضا طاحونی' : value.trim();
-    await _prefs!.setString(_nameKey, inspectorName);
-  }
-
-  static Future<void> setPassword(String value) async {
-    password = value;
-    await _prefs!.setString(_passwordKey, value);
-  }
-
-  static Future<void> setDate(String value) async {
-    configuredDate = value;
-    await _prefs!.setString(_dateKey, value);
-  }
-
-  static Future<void> setTime(String value) async {
-    configuredTime = value;
-    await _prefs!.setString(_timeKey, value);
-  }
-
-  static Future<void> setProfileImagePath(String value) async {
-    profileImagePath = value;
-    await _prefs!.setString(_profileKey, value);
-  }
-
-  static String todayJalali() {
-    return configuredDate.isNotEmpty
-        ? configuredDate
-        : gregorianToJalali(DateTime.now());
-  }
-
-  static String currentTime() {
-    if (configuredTime.isNotEmpty) return configuredTime;
-    final now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-  }
-
-  static Map<String, dynamic> exportSettings() => {
-        'inspectorName': inspectorName,
-        'password': password,
-        'configuredDate': configuredDate,
-        'configuredTime': configuredTime,
-        'profileImagePath': profileImagePath,
-      };
-
-  static Future<void> restoreSettings(Map<String, dynamic> data) async {
-    await setInspectorName(data['inspectorName']?.toString() ?? 'رضا طاحونی');
-    await setPassword(data['password']?.toString() ?? '1234');
-    await setDate(data['configuredDate']?.toString() ?? '');
-    await setTime(data['configuredTime']?.toString() ?? '');
-    await setProfileImagePath(data['profileImagePath']?.toString() ?? '');
-  }
-}
-
-// =====================================================
 // ذخیره اطلاعات
 // =====================================================
 
@@ -438,24 +353,6 @@ Future<String?> saveExportFileToPhone({
   return path;
 }
 
-Future<Directory> getExportDirectory() async {
-  final publicDownload = Directory('/storage/emulated/0/Download');
-  try {
-    if (!await publicDownload.exists()) {
-      await publicDownload.create(recursive: true);
-    }
-    return publicDownload;
-  } catch (_) {
-    final external = await getExternalStorageDirectory();
-    if (external != null) {
-      final folder = Directory('${external.path}/InspectionManager');
-      if (!await folder.exists()) await folder.create(recursive: true);
-      return folder;
-    }
-    return getApplicationDocumentsDirectory();
-  }
-}
-
 Future<Directory> getEvidenceDirectory() async {
   final base = await getApplicationDocumentsDirectory();
 
@@ -485,7 +382,7 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
   void login() {
-    if (passwordController.text == AppSettings.password) {
+    if (passwordController.text == '1234') {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -723,7 +620,8 @@ class _NewInspectionPageState
   void initState() {
     super.initState();
 
-    dateController.text = AppSettings.todayJalali();
+    dateController.text =
+        gregorianToJalali(DateTime.now());
   }
 
   // ---------------------------------------------------
@@ -1916,7 +1814,7 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
   int get repeatedInspectionCount => repeatedGroups.values.fold<int>(0, (sum, list) => sum + list.length);
 
   Future<void> pickDate() async {
-    final initial = AppSettings.todayJalali().split('/');
+    final initial = gregorianToJalali(DateTime.now()).split('/');
     var year = int.tryParse(initial[0]) ?? 1405;
     var month = int.tryParse(initial[1]) ?? 1;
     var day = int.tryParse(initial[2]) ?? 1;
@@ -1933,21 +1831,21 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
               children: [
                 Expanded(child: DropdownButtonFormField<int>(
                   value: day,
-                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
+                  items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => day = v ?? day),
                   decoration: const InputDecoration(labelText: 'روز'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: DropdownButtonFormField<int>(
                   value: month,
-                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
+                  items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => month = v ?? month),
                   decoration: const InputDecoration(labelText: 'ماه'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: DropdownButtonFormField<int>(
                   value: year,
-                  items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(),
+                  items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersian('$v')))).toList(),
                   onChanged: (v) => setDialogState(() => year = v ?? year),
                   decoration: const InputDecoration(labelText: 'سال'),
                 )),
@@ -3129,583 +3027,19 @@ class RepeatedDatesPage extends StatelessWidget {
 // صفحات فعلاً آماده توسعه
 // =====================================================
 
-class DailyPerformancePage extends StatefulWidget {
-  const DailyPerformancePage({super.key});
-
-  @override
-  State<DailyPerformancePage> createState() => _DailyPerformancePageState();
-}
-
-class _DailyPerformancePageState extends State<DailyPerformancePage> {
-  late final TextEditingController dateController;
-  List<Inspection> inspections = [];
-  bool loading = true;
-  bool exporting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    dateController = TextEditingController(
-      text: _normalizeDate(AppSettings.todayJalali()),
-    );
-    _loadInspections();
-  }
-
-  @override
-  void dispose() {
-    dateController.dispose();
-    super.dispose();
-  }
-
-  String _normalizeDate(String value) {
-    const p = '۰۱۲۳۴۵۶۷۸۹';
-    const a = '٠١٢٣٤٥٦٧٨٩';
-    const e = '0123456789';
-    var v = value.trim();
-    for (var i = 0; i < 10; i++) {
-      v = v.replaceAll(p[i], e[i]).replaceAll(a[i], e[i]);
-    }
-    final parts = v.split('/');
-    if (parts.length != 3) return v;
-    return '${parts[0].padLeft(4, '0')}/${parts[1].padLeft(2, '0')}/${parts[2].padLeft(2, '0')}';
-  }
-
-  Future<void> _loadInspections() async {
-    try {
-      final data = await AppStorage.getInspections();
-      if (!mounted) return;
-      setState(() {
-        inspections = data;
-        loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        inspections = [];
-        loading = false;
-      });
-    }
-  }
-
-  List<Inspection> get dailyInspections {
-    final target = _normalizeDate(dateController.text);
-    if (target.isEmpty || target.split('/').length != 3) return [];
-    return inspections
-        .where((item) => _normalizeDate(item.date) == target)
-        .toList();
-  }
-
-  Map<String, List<Inspection>> get cityGroups {
-    final groups = <String, List<Inspection>>{};
-    for (final item in dailyInspections) {
-      final city = item.city.trim().isEmpty ? 'بدون شهر' : item.city.trim();
-      groups.putIfAbsent(city, () => []).add(item);
-    }
-    return groups;
-  }
-
-  int get problemCount =>
-      dailyInspections.where((item) => item.problems.trim().isNotEmpty).length;
-
-  Future<void> pickDate() async {
-    final initial = _normalizeDate(dateController.text).split('/');
-    final today = _normalizeDate(AppSettings.todayJalali()).split('/');
-    var year = int.tryParse(initial.isNotEmpty ? initial[0] : '') ??
-        int.tryParse(today[0]) ?? 1405;
-    var month = int.tryParse(initial.length > 1 ? initial[1] : '') ??
-        int.tryParse(today[1]) ?? 1;
-    var day = int.tryParse(initial.length > 2 ? initial[2] : '') ??
-        int.tryParse(today[2]) ?? 1;
-
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
-          if (day > maxDay) day = maxDay;
-          return AlertDialog(
-            title: const Text('انتخاب تاریخ شمسی'),
-            content: Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: day,
-                    items: List.generate(maxDay, (i) => i + 1)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => day = v ?? day),
-                    decoration: const InputDecoration(labelText: 'روز'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: month,
-                    items: List.generate(12, (i) => i + 1)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => month = v ?? month),
-                    decoration: const InputDecoration(labelText: 'ماه'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    value: year,
-                    items: List.generate(21, (i) => year - 10 + i)
-                        .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(toPersianDigits('$v')),
-                            ))
-                        .toList(),
-                    onChanged: (v) => setDialogState(() => year = v ?? year),
-                    decoration: const InputDecoration(labelText: 'سال'),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('انصراف'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(
-                  dialogContext,
-                  '${year.toString().padLeft(4, '0')}/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}',
-                ),
-                child: const Text('تأیید'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (picked != null) {
-      setState(() => dateController.text = picked);
-    }
-  }
-
-  void _showInvalidDate() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تاریخ را به صورت 1405/06/01 وارد کنید.')),
-    );
-  }
-
-  Future<void> _openAllInspections() async {
-    final records = dailyInspections;
-    if (records.isEmpty) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DailyArchivePage(
-          date: _normalizeDate(dateController.text),
-          inspections: inspections,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openProblems() async {
-    final records = dailyInspections
-        .where((item) => item.problems.trim().isNotEmpty)
-        .toList();
-    if (records.isEmpty) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ProblemInspectionsPage(inspections: records),
-      ),
-    );
-  }
-
-  Future<void> _openCity(String city) async {
-    final targetCity = city == 'بدون شهر' ? '' : city;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DailyArchivePage(
-          date: _normalizeDate(dateController.text),
-          city: targetCity,
-          inspections: inspections,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _exportExcel() async {
-    if (exporting) return;
-    final records = dailyInspections;
-    if (records.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('برای این تاریخ بازرسی‌ای برای خروجی وجود ندارد.')),
-      );
-      return;
-    }
-
-    setState(() => exporting = true);
-    try {
-      final excel = Excel.createExcel();
-      final date = _normalizeDate(dateController.text);
-
-      final summary = excel['گزارش عملکرد روزانه'];
-      summary.appendRow([
-        TextCellValue('سامانه مدیریت بازرسی'),
-        TextCellValue(''),
-      ]);
-      summary.appendRow([
-        TextCellValue('گزارش عملکرد روزانه'),
-        TextCellValue(''),
-      ]);
-      summary.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue(date),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد کل بازرسی'),
-        IntCellValue(records.length),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد بازرسی دارای مشکل'),
-        IntCellValue(records.where((e) => e.problems.trim().isNotEmpty).length),
-      ]);
-      summary.appendRow([
-        TextCellValue('تعداد بازرسی بدون مشکل'),
-        IntCellValue(records.where((e) => e.problems.trim().isEmpty).length),
-      ]);
-      summary.appendRow([TextCellValue('')]);
-      summary.appendRow([
-        TextCellValue('شهر'),
-        TextCellValue('تعداد بازرسی'),
-        TextCellValue('تعداد دارای مشکل'),
-      ]);
-      for (final entry in cityGroups.entries) {
-        summary.appendRow([
-          TextCellValue(entry.key),
-          IntCellValue(entry.value.length),
-          IntCellValue(entry.value.where((e) => e.problems.trim().isNotEmpty).length),
-        ]);
-      }
-
-      final details = excel['جزئیات بازرسی‌ها'];
-      details.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('شهر'),
-        TextCellValue('شرح مشکلات'),
-        TextCellValue('تعداد مستندات'),
-      ]);
-      for (final item in records) {
-        details.appendRow([
-          TextCellValue(item.date),
-          TextCellValue(item.agentCode),
-          TextCellValue(item.agentName),
-          TextCellValue(item.city),
-          TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems),
-          IntCellValue(item.evidences.length),
-        ]);
-      }
-
-      final problems = excel['بازرسی‌های دارای مشکل'];
-      problems.appendRow([
-        TextCellValue('تاریخ'),
-        TextCellValue('کد عامل'),
-        TextCellValue('نام عامل'),
-        TextCellValue('شهر'),
-        TextCellValue('شرح مشکلات'),
-      ]);
-      for (final item in records.where((e) => e.problems.trim().isNotEmpty)) {
-        problems.appendRow([
-          TextCellValue(item.date),
-          TextCellValue(item.agentCode),
-          TextCellValue(item.agentName),
-          TextCellValue(item.city),
-          TextCellValue(item.problems),
-        ]);
-      }
-
-      final bytes = excel.save();
-      if (bytes == null || bytes.isEmpty) {
-        throw Exception('فایل Excel خالی است');
-      }
-
-      final dir = await getExportDirectory();
-      final safeDate = date.replaceAll('/', '-');
-      final file = File(
-        '${dir.path}/گزارش_عملکرد_روزانه_$safeDate.xlsx',
-      );
-      await file.writeAsBytes(bytes, flush: true);
-
-      final result = await OpenFilex.open(file.path);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.type == ResultType.done
-                ? 'گزارش Excel ذخیره شد و برای مشاهده باز شد.'
-                : 'گزارش Excel در حافظه گوشی ذخیره شد. از پوشه Download می‌توانید آن را باز یا چاپ کنید.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('خطا در ساخت گزارش Excel: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => exporting = false);
-    }
-  }
-
-  Widget _summaryCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required VoidCallback? onTap,
-  }) {
-    return Card(
-      color: const Color(0xFF101B2E),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            children: [
-              Icon(icon, color: const Color(0xFFC9A227), size: 34),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                toPersianDigits(value),
-                style: const TextStyle(
-                  color: Color(0xFFC9A227),
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (onTap != null) ...[
-                const SizedBox(height: 4),
-                const Text(
-                  'برای مشاهده لمس کنید',
-                  style: TextStyle(fontSize: 11, color: Colors.white60),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+class DailyPerformancePage
+    extends StatelessWidget {
+  const DailyPerformancePage({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final records = dailyInspections;
-    final groups = cityGroups;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ثبت عملکرد روزانه'),
-        actions: [
-          IconButton(
-            tooltip: 'خروجی Excel برای مدیر',
-            onPressed: exporting ? null : _exportExcel,
-            icon: exporting
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.table_chart),
-          ),
-        ],
-      ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadInspections,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Card(
-                    color: const Color(0xFF101B2E),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'تاریخ عملکرد',
-                            style: TextStyle(
-                              color: Color(0xFFC9A227),
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: dateController,
-                                  keyboardType: TextInputType.datetime,
-                                  onSubmitted: (_) => setState(() {}),
-                                  decoration: const InputDecoration(
-                                    labelText: 'تاریخ شمسی',
-                                    hintText: '1405/06/06',
-                                    prefixIcon: Icon(Icons.event),
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton.filled(
-                                tooltip: 'انتخاب تاریخ',
-                                onPressed: pickDate,
-                                icon: const Icon(Icons.calendar_month),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                final normalized = _normalizeDate(dateController.text);
-                                if (normalized.split('/').length != 3) {
-                                  _showInvalidDate();
-                                  return;
-                                }
-                                setState(() => dateController.text = normalized);
-                              },
-                              icon: const Icon(Icons.search),
-                              label: const Text('نمایش عملکرد این تاریخ'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'گزارش عملکرد ${toPersianDigits(_normalizeDate(dateController.text))}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFFC9A227),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _summaryCard(
-                          title: 'کل بازرسی‌ها',
-                          value: '${records.length}',
-                          icon: Icons.assignment_turned_in,
-                          onTap: records.isEmpty ? null : _openAllInspections,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _summaryCard(
-                          title: 'بازرسی دارای مشکل',
-                          value: '$problemCount',
-                          icon: Icons.warning_amber_rounded,
-                          onTap: problemCount == 0 ? null : _openProblems,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (records.isEmpty)
-                    const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text(
-                          'برای این تاریخ هنوز بازرسی‌ای ثبت نشده است.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    )
-                  else ...[
-                    Card(
-                      color: const Color(0xFF101B2E),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'شهرهای محل بازرسی',
-                              style: TextStyle(
-                                color: Color(0xFFC9A227),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ...groups.entries.map((entry) {
-                              final cityProblems = entry.value
-                                  .where((e) => e.problems.trim().isNotEmpty)
-                                  .length;
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  leading: const Icon(
-                                    Icons.location_city,
-                                    color: Color(0xFFC9A227),
-                                  ),
-                                  title: Text(
-                                    entry.key,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  subtitle: Text(
-                                    'بازرسی: ${toPersianDigits('${entry.value.length}')}  •  دارای مشکل: ${toPersianDigits('$cityProblems')}',
-                                  ),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: () => _openCity(entry.key),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: exporting ? null : _exportExcel,
-                        icon: const Icon(Icons.table_chart),
-                        label: const Text('ساخت و باز کردن گزارش Excel برای مدیر'),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'فایل Excel در حافظه گوشی و پوشه Download ذخیره می‌شود و برای مشاهده، ارسال یا چاپ قابل استفاده است.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+    return const SimplePage(
+      title: 'ثبت عملکرد روزانه',
+      message:
+          'این بخش در مرحله بعد تکمیل می‌شود.',
+      icon: Icons.today,
     );
   }
 }
@@ -3736,7 +3070,7 @@ class _ReportsPageState extends State<ReportsPage> {
   @override
   void initState() {
     super.initState();
-    final today = AppSettings.todayJalali();
+    final today = gregorianToJalali(DateTime.now());
     selectedMonth = _getMonth(today);
     startDate = today;
     endDate = today;
@@ -3891,7 +3225,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<String?> _pickJalaliDate({String? initial}) async {
-    final parts = _normalizeDigits(initial ?? AppSettings.todayJalali()).split('/');
+    final parts = _normalizeDigits(initial ?? gregorianToJalali(DateTime.now())).split('/');
     int year = int.tryParse(parts.length > 0 ? parts[0] : '') ?? 1405;
     int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
     int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
@@ -4544,246 +3878,19 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
   }
 }
 
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
-
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  final ImagePicker _imagePicker = ImagePicker();
-  late TextEditingController _nameController;
-  late TextEditingController _dateController;
-  late TextEditingController _timeController;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(text: AppSettings.inspectorName);
-    _dateController = TextEditingController(text: AppSettings.todayJalali());
-    _timeController = TextEditingController(text: AppSettings.currentTime());
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _dateController.dispose();
-    _timeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickProfileImage() async {
-    final image = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 90);
-    if (image == null) return;
-    await AppSettings.setProfileImagePath(image.path);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _changeName() async {
-    final controller = TextEditingController(text: AppSettings.inspectorName);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('تغییر نام بازرس'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'نام بازرس')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('ذخیره')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result != null && result.trim().isNotEmpty) {
-      await AppSettings.setInspectorName(result);
-      _nameController.text = AppSettings.inspectorName;
-      if (mounted) setState(() {});
-    }
-  }
-
-  Future<void> _changePassword() async {
-    final oldC = TextEditingController();
-    final newC = TextEditingController();
-    final repeatC = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('تغییر رمز عبور'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: oldC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز فعلی')),
-          TextField(controller: newC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز جدید')),
-          TextField(controller: repeatC, obscureText: true, decoration: const InputDecoration(labelText: 'تکرار رمز جدید')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
-          ElevatedButton(onPressed: () {
-            if (oldC.text != AppSettings.password || newC.text.length < 4 || newC.text != repeatC.text) return;
-            Navigator.pop(context, true);
-          }, child: const Text('ذخیره')),
-        ],
-      ),
-    );
-    if (ok == true) {
-      await AppSettings.setPassword(newC.text);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز عبور با موفقیت تغییر کرد')));
-    } else if (mounted) {
-      // پیام فقط در صورت ورود ناقص/اشتباه لازم نیست؛ کاربر می‌تواند دوباره اقدام کند.
-    }
-    oldC.dispose(); newC.dispose(); repeatC.dispose();
-  }
-
-  Future<String?> _pickJalaliDate({String? initial}) async {
-    final parts = (initial ?? AppSettings.todayJalali()).replaceAll('۰','0').replaceAll('۱','1').replaceAll('۲','2').replaceAll('۳','3').replaceAll('۴','4').replaceAll('۵','5').replaceAll('۶','6').replaceAll('۷','7').replaceAll('۸','8').replaceAll('۹','9').split('/');
-    var year = int.tryParse(parts[0]) ?? 1405;
-    var month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
-    var day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
-    return showDialog<String>(context: context, builder: (dialogContext) => StatefulBuilder(builder: (context, setDialogState) {
-      final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
-      if (day > maxDay) day = maxDay;
-      return AlertDialog(
-        title: const Text('تنظیم تاریخ شمسی'),
-        content: Row(children: [
-          Expanded(child: DropdownButtonFormField<int>(value: day, items: List.generate(maxDay, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => day = v ?? day), decoration: const InputDecoration(labelText: 'روز'))),
-          const SizedBox(width: 8),
-          Expanded(child: DropdownButtonFormField<int>(value: month, items: List.generate(12, (i) => i + 1).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => month = v ?? month), decoration: const InputDecoration(labelText: 'ماه'))),
-          const SizedBox(width: 8),
-          Expanded(child: DropdownButtonFormField<int>(value: year, items: List.generate(21, (i) => year - 10 + i).map((v) => DropdownMenuItem(value: v, child: Text(toPersianDigits('$v')))).toList(), onChanged: (v) => setDialogState(() => year = v ?? year), decoration: const InputDecoration(labelText: 'سال'))),
-        ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('انصراف')), ElevatedButton(onPressed: () => Navigator.pop(dialogContext, '${year.toString().padLeft(4,'0')}/${month.toString().padLeft(2,'0')}/${day.toString().padLeft(2,'0')}'), child: const Text('ذخیره'))],
-      );
-    }));
-  }
-
-  Future<void> _saveDateTime() async {
-    final date = _dateController.text.trim();
-    final time = _timeController.text.trim();
-    final valid = RegExp(r'^\d{4}/\d{2}/\d{2}$').hasMatch(_toEnglishDigits(date)) && RegExp(r'^\d{2}:\d{2}$').hasMatch(_toEnglishDigits(time));
-    if (!valid) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ یا ساعت واردشده معتبر نیست')));
-      return;
-    }
-    await AppSettings.setDate(_toEnglishDigits(date));
-    await AppSettings.setTime(_toEnglishDigits(time));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ و ساعت ذخیره شد و در تمام بخش‌های برنامه اعمال می‌شود')));
-  }
-
-  String _toEnglishDigits(String value) => value.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
-        const p='۰۱۲۳۴۵۶۷۸۹'; const a='٠١٢٣٤٥٦٧٨٩';
-        final c=m.group(0)!; final i=p.indexOf(c); return i >= 0 ? '$i' : '${a.indexOf(c)}';
-      });
-
-  Future<Map<String, dynamic>> _makeBackup() async {
-    final inspections = await AppStorage.getInspections();
-    final evidence = <String, Map<String, dynamic>>{};
-    for (final inspection in inspections) {
-      for (final item in inspection.evidences) {
-        if (item.path.isEmpty || evidence.containsKey(item.path)) continue;
-        try {
-          final file = File(item.path);
-          if (await file.exists()) evidence[item.path] = {'name': item.name, 'type': item.type, 'bytes': base64Encode(await file.readAsBytes())};
-        } catch (_) {}
-      }
-    }
-    Map<String, dynamic>? profile;
-    if (AppSettings.profileImagePath.isNotEmpty) {
-      try {
-        final file = File(AppSettings.profileImagePath);
-        if (await file.exists()) profile = {'bytes': base64Encode(await file.readAsBytes()), 'name': file.uri.pathSegments.last};
-      } catch (_) {}
-    }
-    return {'format': 'inspection_manager_backup_v2', 'createdAt': DateTime.now().toIso8601String(), 'settings': AppSettings.exportSettings(), 'profileImage': profile, 'inspections': inspections.map((e) => e.toJson()).toList(), 'evidenceFiles': evidence};
-  }
-
-  Future<void> _backup() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final data = await _makeBackup();
-      final bytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
-      final path = await FilePicker.platform.saveFile(dialogTitle: 'ذخیره نسخه پشتیبان', fileName: 'نسخه_پشتیبان_سامانه_بازرسی_${DateTime.now().millisecondsSinceEpoch}.backup.json', initialDirectory: '/storage/emulated/0/Download', bytes: Uint8List.fromList(bytes));
-      if (mounted && path != null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('نسخه پشتیبان با موفقیت ذخیره شد')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تهیه نسخه پشتیبان ناموفق بود: $e')));
-    } finally { if (mounted) setState(() => _busy = false); }
-  }
-
-  Future<void> _restore() async {
-    if (_busy) return;
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], withData: true);
-    if (result == null || result.files.single.bytes == null) return;
-    setState(() => _busy = true);
-    try {
-      final json = jsonDecode(utf8.decode(result.files.single.bytes!));
-      if (json is! Map || json['format'] != 'inspection_manager_backup_v2') throw Exception('فرمت نسخه پشتیبان معتبر نیست');
-      final settings = Map<String, dynamic>.from(json['settings'] ?? {});
-      final rawInspections = (json['inspections'] as List? ?? []);
-      final restored = rawInspections.map((e) => Inspection.fromJson(Map<String, dynamic>.from(e))).toList();
-      final evidenceFiles = Map<String, dynamic>.from(json['evidenceFiles'] ?? {});
-      final evidenceDir = await getEvidenceDirectory();
-      final pathMap = <String, String>{};
-      for (final entry in evidenceFiles.entries) {
-        final oldPath = entry.key;
-        final info = Map<String, dynamic>.from(entry.value);
-        final name = info['name']?.toString().trim().isNotEmpty == true ? info['name'].toString() : 'evidence_${DateTime.now().millisecondsSinceEpoch}';
-        final safeName = name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-        final newPath = '${evidenceDir.path}/restored_${DateTime.now().millisecondsSinceEpoch}_$safeName';
-        await File(newPath).writeAsBytes(base64Decode(info['bytes'].toString()));
-        pathMap[oldPath] = newPath;
-      }
-      final finalInspections = restored.map((i) => i.copyWith(evidences: i.evidences.map((e) => EvidenceFile(path: pathMap[e.path] ?? e.path, type: e.type, name: e.name)).toList())).toList();
-      await AppStorage.saveInspections(finalInspections);
-      final profile = json['profileImage'];
-      if (profile is Map && profile['bytes'] != null) {
-        final dir = await getApplicationDocumentsDirectory();
-        final profilePath = '${dir.path}/profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        await File(profilePath).writeAsBytes(base64Decode(profile['bytes'].toString()));
-        settings['profileImagePath'] = profilePath;
-      }
-      await AppSettings.restoreSettings(settings);
-      _nameController.text = AppSettings.inspectorName;
-      _dateController.text = AppSettings.todayJalali();
-      _timeController.text = AppSettings.currentTime();
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمام اطلاعات نسخه پشتیبان با موفقیت بازیابی شد. برنامه را یک‌بار بازنشانی کنید.')));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بازیابی ناموفق بود: $e')));
-    } finally { if (mounted) setState(() => _busy = false); }
-  }
-
-  Widget _tile({required IconData icon, required String title, required VoidCallback onTap, String? subtitle}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFFC9A227)), title: Text(title), subtitle: subtitle == null ? null : Text(subtitle), trailing: const Icon(Icons.chevron_left), onTap: _busy ? null : onTap));
+class SettingsPage
+    extends StatelessWidget {
+  const SettingsPage({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = AppSettings.profileImagePath.isNotEmpty && File(AppSettings.profileImagePath).existsSync();
-    return Scaffold(
-      appBar: AppBar(title: const Text('تنظیمات')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-          Row(children: [
-            GestureDetector(onTap: _pickProfileImage, child: CircleAvatar(radius: 34, backgroundImage: hasPhoto ? FileImage(File(AppSettings.profileImagePath)) : null, child: hasPhoto ? null : const Icon(Icons.person, size: 38))),
-            const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(AppSettings.inspectorName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)), const SizedBox(height: 4), const Text('ویرایش پروفایل', style: TextStyle(color: Colors.grey))])),
-            IconButton(onPressed: _pickProfileImage, icon: const Icon(Icons.edit, color: Color(0xFFC9A227))),
-          ]),
-        ]))),
-        _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
-        _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور', onTap: _changePassword),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(children: [Expanded(child: TextField(controller: _dateController, readOnly: true, decoration: const InputDecoration(labelText: 'تاریخ شمسی', prefixIcon: Icon(Icons.calendar_month)))), const SizedBox(width: 8), IconButton(onPressed: () async { final v = await _pickJalaliDate(initial: _dateController.text); if (v != null) setState(() => _dateController.text = v); }, icon: const Icon(Icons.edit_calendar, color: Color(0xFFC9A227)))]),
-          const SizedBox(height: 10),
-          TextField(controller: _timeController, readOnly: true, decoration: const InputDecoration(labelText: 'ساعت', prefixIcon: Icon(Icons.access_time)), onTap: () async { final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (picked != null) setState(() => _timeController.text = '${picked.hour.toString().padLeft(2,'0')}:${picked.minute.toString().padLeft(2,'0')}'); }),
-          const SizedBox(height: 12), ElevatedButton.icon(onPressed: _saveDateTime, icon: const Icon(Icons.save), label: const Text('ذخیره تاریخ و زمان')),
-        ]))),
-        _tile(icon: Icons.backup_outlined, title: 'نسخه پشتیبان', subtitle: 'ذخیره تمام اطلاعات و مستندات', onTap: _backup),
-        _tile(icon: Icons.restore, title: 'بازیابی اطلاعات', subtitle: 'بازیابی کامل اطلاعات از فایل پشتیبان', onTap: _restore),
-        _tile(icon: Icons.info_outline, title: 'درباره برنامه', onTap: () => showAboutDialog(context: context, applicationName: 'سامانه مدیریت بازرسی', applicationVersion: '1.0.0', applicationLegalese: 'سامانه مدیریت بازرسی')),
-        const SizedBox(height: 20),
-        if (_busy) const Center(child: CircularProgressIndicator()),
-      ]),
+    return const SimplePage(
+      title: 'تنظیمات',
+      message:
+          'تنظیمات بازرس و رمز عبور در مرحله بعد تکمیل می‌شود.',
+      icon: Icons.settings,
     );
   }
 }
