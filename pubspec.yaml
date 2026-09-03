@@ -23,8 +23,6 @@ dependencies:
   # خروجی واقعی Excel (.xlsx)
   excel_community: ^2.3.0
 
-  # خروجی Word (.docx) برای مراحل گزارش مدیریتی
-  docx_dart: ^1.2.0
 
 dev_dependencies:
   flutter_test:
