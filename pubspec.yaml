@@ -21,7 +21,7 @@ dependencies:
   open_filex: ^4.7.0
 
   # خروجی واقعی Excel (.xlsx)
-  excel_community: ^2.3.0
+  excel_community: 1.0.2
 
 
 dev_dependencies:
