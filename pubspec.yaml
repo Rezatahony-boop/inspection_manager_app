@@ -10,7 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  open_filex: ^4.7.0
+
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.3.2
   image_picker: ^1.1.2
@@ -18,14 +18,27 @@ dependencies:
   record: ^6.0.0
   path_provider: ^2.1.4
   permission_handler: ^11.3.1
-  excel: ^4.0.6
+  open_filex: ^4.7.0
+
+  # خروجی واقعی Excel (.xlsx)
+  excel_community: ^2.3.0
+
+  # خروجی Word (.docx) برای مراحل گزارش مدیریتی
   docx_dart: ^1.2.0
-  pdf: ^3.11.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/app_icon.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/app_icon.png"
+  min_sdk_android: 21
