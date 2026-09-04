@@ -325,6 +325,35 @@ class Inspection {
 // تنظیمات سراسری برنامه
 // =====================================================
 
+// نقش کاربر روی این گوشی: بازرس، سرپرست یا مدیرعامل
+enum UserRole { inspector, supervisor, manager }
+
+extension UserRoleLabel on UserRole {
+  String get label {
+    switch (this) {
+      case UserRole.inspector:
+        return 'بازرس';
+      case UserRole.supervisor:
+        return 'سرپرست';
+      case UserRole.manager:
+        return 'مدیرعامل';
+    }
+  }
+
+  String get storageValue => toString().split('.').last;
+
+  static UserRole fromStorage(String? value) {
+    switch (value) {
+      case 'supervisor':
+        return UserRole.supervisor;
+      case 'manager':
+        return UserRole.manager;
+      default:
+        return UserRole.inspector;
+    }
+  }
+}
+
 class AppSettings {
   static const _nameKey = 'inspector_name';
   static const _passwordKey = 'app_password';
@@ -332,6 +361,7 @@ class AppSettings {
   static const _timeKey = 'configured_time';
   static const _dateAnchorKey = 'configured_date_anchor_gregorian';
   static const _profileKey = 'profile_image_path';
+  static const _roleKey = 'user_role';
 
   static SharedPreferences? _prefs;
   static String inspectorName = 'رضا طاحونی';
@@ -340,6 +370,7 @@ class AppSettings {
   static String configuredTime = '';
   static String dateAnchorGregorian = '';
   static String profileImagePath = '';
+  static UserRole role = UserRole.inspector;
 
   static Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
@@ -349,6 +380,12 @@ class AppSettings {
     configuredTime = _prefs!.getString(_timeKey) ?? '';
     dateAnchorGregorian = _prefs!.getString(_dateAnchorKey) ?? '';
     profileImagePath = _prefs!.getString(_profileKey) ?? '';
+    role = UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
+  }
+
+  static Future<void> setRole(UserRole value) async {
+    role = value;
+    await _prefs!.setString(_roleKey, value.storageValue);
   }
 
   static Future<void> setInspectorName(String value) async {
@@ -364,8 +401,7 @@ class AppSettings {
   static Future<void> setDate(String value, {DateTime? anchorDate}) async {
     configuredDate = value;
     final anchor = anchorDate ?? DateTime.now();
-    final localDay = DateTime(anchor.year, anchor.month, anchor.day);
-    dateAnchorGregorian = '${localDay.year.toString().padLeft(4, '0')}/${localDay.month.toString().padLeft(2, '0')}/${localDay.day.toString().padLeft(2, '0')}';
+    dateAnchorGregorian = anchor.toIso8601String();
     await _prefs!.setString(_dateKey, value);
     await _prefs!.setString(_dateAnchorKey, dateAnchorGregorian);
   }
@@ -375,6 +411,49 @@ class AppSettings {
     await _prefs!.setString(_timeKey, value);
   }
 
+  /// ثبت هم‌زمان تاریخ و ساعت به‌عنوان لحظه مرجع؛ از این لحظه به بعد
+  /// هم تاریخ شمسی و هم ساعت به‌صورت خودکار و دقیق با زمان واقعی گوشی جلو می‌روند.
+  static Future<void> setDateAndTime(String jalaliDate, String time) async {
+    configuredDate = jalaliDate;
+    configuredTime = time;
+    final anchor = DateTime.now();
+    dateAnchorGregorian = anchor.toIso8601String();
+    await _prefs!.setString(_dateKey, jalaliDate);
+    await _prefs!.setString(_timeKey, time);
+    await _prefs!.setString(_dateAnchorKey, dateAnchorGregorian);
+  }
+
+  static DateTime _correctedNow() {
+    final now = DateTime.now();
+    if (configuredDate.isEmpty || dateAnchorGregorian.isEmpty) return now;
+
+    DateTime? anchorReal;
+    try {
+      anchorReal = DateTime.parse(dateAnchorGregorian);
+    } catch (_) {
+      anchorReal = null;
+    }
+    if (anchorReal == null) return now;
+
+    final configuredGregorianDate = jalaliToGregorianDate(configuredDate);
+    var hour = anchorReal.hour;
+    var minute = anchorReal.minute;
+    if (configuredTime.contains(':')) {
+      final tParts = configuredTime.split(':');
+      hour = int.tryParse(tParts[0]) ?? hour;
+      minute = int.tryParse(tParts.length > 1 ? tParts[1] : '0') ?? minute;
+    }
+    final baseDateTime = DateTime(
+      configuredGregorianDate.year,
+      configuredGregorianDate.month,
+      configuredGregorianDate.day,
+      hour,
+      minute,
+    );
+    final elapsed = now.difference(anchorReal);
+    return baseDateTime.add(elapsed);
+  }
+
   static Future<void> setProfileImagePath(String value) async {
     profileImagePath = value;
     await _prefs!.setString(_profileKey, value);
@@ -382,30 +461,16 @@ class AppSettings {
 
   static String todayJalali() {
     if (configuredDate.isEmpty) return gregorianToJalali(DateTime.now());
-    if (dateAnchorGregorian.isEmpty) return configuredDate;
-
-    final parts = dateAnchorGregorian.split('/');
-    if (parts.length != 3) return configuredDate;
-    final anchor = DateTime(
-      int.tryParse(parts[0]) ?? DateTime.now().year,
-      int.tryParse(parts[1]) ?? DateTime.now().month,
-      int.tryParse(parts[2]) ?? DateTime.now().day,
-    );
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final dayOffset = today.difference(anchor).inDays;
-    if (dayOffset == 0) return configuredDate;
-
-    final configuredGregorian = jalaliToGregorianDate(configuredDate);
-    return gregorianToJalali(
-      configuredGregorian.add(Duration(days: dayOffset)),
-    );
+    return gregorianToJalali(_correctedNow());
   }
 
   static String currentTime() {
-    if (configuredTime.isNotEmpty) return configuredTime;
-    final now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    if (configuredDate.isEmpty && configuredTime.isEmpty) {
+      final now = DateTime.now();
+      return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    }
+    final corrected = _correctedNow();
+    return '${corrected.hour.toString().padLeft(2, '0')}:${corrected.minute.toString().padLeft(2, '0')}';
   }
 
   static Map<String, dynamic> exportSettings() => {
@@ -415,6 +480,7 @@ class AppSettings {
         'configuredTime': configuredTime,
         'dateAnchorGregorian': dateAnchorGregorian,
         'profileImagePath': profileImagePath,
+        'role': role.storageValue,
       };
 
   static Future<void> restoreSettings(Map<String, dynamic> data) async {
@@ -434,6 +500,7 @@ class AppSettings {
     await setDate(restoredDate, anchorDate: anchor);
     await setTime(data['configuredTime']?.toString() ?? '');
     await setProfileImagePath(data['profileImagePath']?.toString() ?? '');
+    await setRole(UserRoleLabel.fromStorage(data['role']?.toString()));
   }
 }
 
@@ -721,9 +788,10 @@ class DashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final role = AppSettings.role;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('داشبورد'),
+        title: Text('داشبورد (${role.label})'),
       ),
       body: GridView.count(
         padding: const EdgeInsets.all(16),
@@ -731,18 +799,19 @@ class DashboardPage extends StatelessWidget {
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
         children: [
-          DashboardButton(
-            title: 'ثبت بازرسی جدید',
-            icon: Icons.assignment_add,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NewInspectionPage(),
-                ),
-              );
-            },
-          ),
+          if (role != UserRole.manager)
+            DashboardButton(
+              title: 'ثبت بازرسی جدید',
+              icon: Icons.assignment_add,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const NewInspectionPage(),
+                  ),
+                );
+              },
+            ),
           DashboardButton(
             title: 'ثبت عملکرد روزانه',
             icon: Icons.today,
@@ -5048,6 +5117,33 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _changeRole() async {
+    final result = await showDialog<UserRole>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('نقش این گوشی'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: UserRole.values
+              .map((r) => RadioListTile<UserRole>(
+                    value: r,
+                    groupValue: AppSettings.role,
+                    title: Text(r.label),
+                    onChanged: (v) => Navigator.pop(context, v),
+                  ))
+              .toList(),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+        ],
+      ),
+    );
+    if (result != null) {
+      await AppSettings.setRole(result);
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _changePassword() async {
     final oldC = TextEditingController();
     final newC = TextEditingController();
@@ -5109,8 +5205,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ یا ساعت واردشده معتبر نیست')));
       return;
     }
-    await AppSettings.setDate(_toEnglishDigits(date));
-    await AppSettings.setTime(_toEnglishDigits(time));
+    await AppSettings.setDateAndTime(_toEnglishDigits(date), _toEnglishDigits(time));
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ و ساعت ذخیره شد و در تمام بخش‌های برنامه اعمال می‌شود')));
   }
 
@@ -5215,6 +5310,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ]))),
         _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
+        _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: AppSettings.role.label, onTap: _changeRole),
         _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور', onTap: _changePassword),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
