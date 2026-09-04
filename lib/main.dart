@@ -783,8 +783,65 @@ class DashboardButton extends StatelessWidget {
   }
 }
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) setState(() {});
+  }
+
+  Widget _buildHeader() {
+    final hasPhoto = AppSettings.profileImagePath.isNotEmpty && File(AppSettings.profileImagePath).existsSync();
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      color: const Color(0xFF101B2E),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundImage: hasPhoto ? FileImage(File(AppSettings.profileImagePath)) : null,
+              child: hasPhoto ? null : const Icon(Icons.person, size: 30),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(AppSettings.inspectorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFFC9A227)),
+                    const SizedBox(width: 6),
+                    Text('امروز: ${toPersianDigits(AppSettings.todayJalali())}'),
+                  ]),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -793,84 +850,103 @@ class DashboardPage extends StatelessWidget {
       appBar: AppBar(
         title: Text('داشبورد (${role.label})'),
       ),
-      body: GridView.count(
-        padding: const EdgeInsets.all(16),
-        crossAxisCount: 2,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
+      body: Column(
         children: [
-          if (role != UserRole.manager)
-            DashboardButton(
-              title: 'ثبت بازرسی جدید',
-              icon: Icons.assignment_add,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const NewInspectionPage(),
+          _buildHeader(),
+          Expanded(
+            child: GridView.count(
+              padding: const EdgeInsets.all(16),
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              children: [
+                if (role != UserRole.manager)
+                  DashboardButton(
+                    title: 'ثبت بازرسی جدید',
+                    icon: Icons.assignment_add,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NewInspectionPage(),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                DashboardButton(
+                  title: 'ثبت عملکرد روزانه',
+                  icon: Icons.today,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DailyPerformancePage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
+                  title: 'بایگانی',
+                  icon: Icons.folder,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ArchivePage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
+                  title: 'گزارش‌ها',
+                  icon: Icons.bar_chart,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ReportsPage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
+                  title: 'گزارش شهرها',
+                  icon: Icons.location_city,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CitiesReportPage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
+                  title: 'سوابق عامل',
+                  icon: Icons.manage_search,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AgentHistoryPage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
+                  title: 'تنظیمات',
+                  icon: Icons.settings,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
-          DashboardButton(
-            title: 'ثبت عملکرد روزانه',
-            icon: Icons.today,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const DailyPerformancePage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'بایگانی',
-            icon: Icons.folder,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ArchivePage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'گزارش‌ها',
-            icon: Icons.bar_chart,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ReportsPage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'سوابق عامل',
-            icon: Icons.manage_search,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AgentHistoryPage(),
-                ),
-              );
-            },
-          ),
-          DashboardButton(
-            title: 'تنظیمات',
-            icon: Icons.settings,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SettingsPage(),
-                ),
-              );
-            },
           ),
         ],
       ),
@@ -4940,6 +5016,229 @@ class _ReportsPageState extends State<ReportsPage> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class CitiesReportPage extends StatefulWidget {
+  const CitiesReportPage({super.key});
+
+  @override
+  State<CitiesReportPage> createState() => _CitiesReportPageState();
+}
+
+class _CitiesReportPageState extends State<CitiesReportPage> {
+  List<Inspection> _all = [];
+  bool _loading = true;
+  String _search = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await AppStorage.getInspections();
+    if (!mounted) return;
+    setState(() {
+      _all = data;
+      _loading = false;
+    });
+  }
+
+  Map<String, List<Inspection>> get _cityGroups {
+    final map = <String, List<Inspection>>{};
+    for (final item in _all) {
+      final city = item.city.trim().isEmpty ? 'بدون شهر' : item.city.trim();
+      map.putIfAbsent(city, () => []).add(item);
+    }
+    return map;
+  }
+
+  List<MapEntry<String, List<Inspection>>> get _filteredCities {
+    final entries = _cityGroups.entries.toList()
+      ..sort((a, b) => b.value.length.compareTo(a.value.length));
+    if (_search.trim().isEmpty) return entries;
+    final q = _search.trim();
+    return entries.where((e) => e.key.contains(q)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('گزارش شهرها')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'جستجوی نام شهر...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setState(() => _search = v),
+                  ),
+                ),
+                Expanded(
+                  child: _filteredCities.isEmpty
+                      ? const Center(child: Text('شهری یافت نشد.'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: _filteredCities.length,
+                          itemBuilder: (context, index) {
+                            final entry = _filteredCities[index];
+                            final problemCount = entry.value
+                                .where((e) => e.problems.trim().isNotEmpty)
+                                .length;
+                            return Card(
+                              child: ListTile(
+                                leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
+                                title: Text(entry.key),
+                                subtitle: Text(
+                                  'تعداد بازرسی: ${toPersianDigits('${entry.value.length}')}  •  تعداد مشکلات: ${toPersianDigits('$problemCount')}',
+                                ),
+                                trailing: const Icon(Icons.chevron_left),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CityInspectionsPage(
+                                      city: entry.key,
+                                      inspections: entry.value,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class CityInspectionsPage extends StatefulWidget {
+  final String city;
+  final List<Inspection> inspections;
+
+  const CityInspectionsPage({super.key, required this.city, required this.inspections});
+
+  @override
+  State<CityInspectionsPage> createState() => _CityInspectionsPageState();
+}
+
+class _CityInspectionsPageState extends State<CityInspectionsPage> {
+  bool exporting = false;
+
+  int get _problemCount => widget.inspections.where((e) => e.problems.trim().isNotEmpty).length;
+
+  Future<void> _exportExcel() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['بازرسی‌های ${widget.city}'];
+      sheet.appendRow([
+        TextCellValue('گزارش بازرسی‌های شهر ${widget.city}'),
+      ]);
+      sheet.appendRow([
+        TextCellValue('تعداد کل بازرسی'),
+        IntCellValue(widget.inspections.length),
+      ]);
+      sheet.appendRow([
+        TextCellValue('تعداد موارد دارای مشکل'),
+        IntCellValue(_problemCount),
+      ]);
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([
+        TextCellValue('تاریخ'),
+        TextCellValue('کد عامل'),
+        TextCellValue('نام عامل'),
+        TextCellValue('شرح مشکلات'),
+        TextCellValue('تعداد مستندات'),
+      ]);
+      for (final item in widget.inspections) {
+        sheet.appendRow([
+          TextCellValue(item.date),
+          TextCellValue(item.agentCode),
+          TextCellValue(item.agentName),
+          TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems),
+          IntCellValue(item.evidences.length),
+        ]);
+      }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
+      final fileName = 'گزارش_${widget.city}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
+      if (savedPath == null || savedPath.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره فایل لغو شد.')));
+        return;
+      }
+      final result = await OpenFilex.open(savedPath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.type == ResultType.done ? 'خروجی Excel در حافظه گوشی ذخیره شد.' : 'خروجی Excel ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.city),
+        actions: [
+          IconButton(tooltip: 'خروجی Excel', onPressed: exporting ? null : _exportExcel, icon: const Icon(Icons.table_chart)),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Card(
+              color: const Color(0xFF101B2E),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: [
+                  Expanded(child: Text('تعداد بازرسی: ${toPersianDigits('${widget.inspections.length}')}')),
+                  Expanded(child: Text('تعداد مشکلات: ${toPersianDigits('$_problemCount')}')),
+                ]),
+              ),
+            ),
+          ),
+          if (exporting) const LinearProgressIndicator(),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: widget.inspections.length,
+              itemBuilder: (context, index) {
+                final item = widget.inspections[index];
+                final hasProblem = item.problems.trim().isNotEmpty;
+                return Card(
+                  child: ListTile(
+                    leading: Icon(hasProblem ? Icons.warning_amber : Icons.check_circle, color: hasProblem ? Colors.orange : Colors.green),
+                    title: Text('${item.agentName} (${item.agentCode})'),
+                    subtitle: Text('${item.date}\n${hasProblem ? item.problems : 'بدون مشکل'}'),
+                    isThreeLine: true,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => InspectionDetailsPage(inspection: item)),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
