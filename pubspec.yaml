@@ -19,6 +19,8 @@ dependencies:
   path_provider: ^2.1.4
   permission_handler: ^11.3.1
   open_filex: ^4.7.0
+
+  # خروجی Excel (.xlsx) و PDF - همانی که در main.dart استفاده شده
   excel: ^4.0.6
   pdf: ^3.11.3
 
