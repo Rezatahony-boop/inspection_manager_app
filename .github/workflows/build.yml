@@ -40,10 +40,20 @@ jobs:
         run: |
           rm -rf /tmp/flutter_project/test
 
+      - name: Set app display name
+        working-directory: /tmp/flutter_project
+        run: |
+          sed -i 's/android:label="inspection_manager_app"/android:label="سامانه مدیریت بازرسی"/' android/app/src/main/AndroidManifest.xml
+
       - name: Get dependencies
         working-directory: /tmp/flutter_project
         run: |
           flutter pub get
+
+      - name: Generate launcher icons
+        working-directory: /tmp/flutter_project
+        run: |
+          dart run flutter_launcher_icons
 
       - name: Build APK
         working-directory: /tmp/flutter_project
