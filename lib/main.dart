@@ -401,7 +401,7 @@ class AppSettings {
   static Future<void> setDate(String value, {DateTime? anchorDate}) async {
     configuredDate = value;
     final anchor = anchorDate ?? DateTime.now();
-    dateAnchorGregorian = anchor.toIso8601String();
+    dateAnchorGregorian = anchor.millisecondsSinceEpoch.toString();
     await _prefs!.setString(_dateKey, value);
     await _prefs!.setString(_dateAnchorKey, dateAnchorGregorian);
   }
@@ -413,27 +413,38 @@ class AppSettings {
 
   /// ثبت هم‌زمان تاریخ و ساعت به‌عنوان لحظه مرجع؛ از این لحظه به بعد
   /// هم تاریخ شمسی و هم ساعت به‌صورت خودکار و دقیق با زمان واقعی گوشی جلو می‌روند.
+  /// لحظه مرجع به‌صورت میلی‌ثانیه (نه رشته تاریخ) ذخیره می‌شود تا هیچ‌وقت در
+  /// خواندن/نوشتن آن خطای تبدیل رخ ندهد و مقدار واردشده هرگز از دست نرود.
   static Future<void> setDateAndTime(String jalaliDate, String time) async {
     configuredDate = jalaliDate;
     configuredTime = time;
     final anchor = DateTime.now();
-    dateAnchorGregorian = anchor.toIso8601String();
+    dateAnchorGregorian = anchor.millisecondsSinceEpoch.toString();
     await _prefs!.setString(_dateKey, jalaliDate);
     await _prefs!.setString(_timeKey, time);
     await _prefs!.setString(_dateAnchorKey, dateAnchorGregorian);
+    // بازخوانی فوری از حافظه برای اطمینان کامل از ذخیره‌شدن مقدار
+    configuredDate = _prefs!.getString(_dateKey) ?? jalaliDate;
+    configuredTime = _prefs!.getString(_timeKey) ?? time;
+    dateAnchorGregorian = _prefs!.getString(_dateAnchorKey) ?? dateAnchorGregorian;
   }
 
-  static DateTime _correctedNow() {
-    final now = DateTime.now();
-    if (configuredDate.isEmpty || dateAnchorGregorian.isEmpty) return now;
-
-    DateTime? anchorReal;
+  static DateTime? _parseAnchor() {
+    if (dateAnchorGregorian.isEmpty) return null;
+    // پشتیبانی از هر دو قالب قدیمی (ISO) و جدید (میلی‌ثانیه) برای جلوگیری از هرگونه از دست رفتن تنظیمات قبلی
+    final asInt = int.tryParse(dateAnchorGregorian);
+    if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
     try {
-      anchorReal = DateTime.parse(dateAnchorGregorian);
+      return DateTime.parse(dateAnchorGregorian);
     } catch (_) {
-      anchorReal = null;
+      return null;
     }
-    if (anchorReal == null) return now;
+  }
+
+  static DateTime? _correctedNowOrNull() {
+    if (configuredDate.isEmpty) return null;
+    final anchorReal = _parseAnchor();
+    if (anchorReal == null) return null;
 
     final configuredGregorianDate = jalaliToGregorianDate(configuredDate);
     var hour = anchorReal.hour;
@@ -450,7 +461,7 @@ class AppSettings {
       hour,
       minute,
     );
-    final elapsed = now.difference(anchorReal);
+    final elapsed = DateTime.now().difference(anchorReal);
     return baseDateTime.add(elapsed);
   }
 
@@ -461,7 +472,14 @@ class AppSettings {
 
   static String todayJalali() {
     if (configuredDate.isEmpty) return gregorianToJalali(DateTime.now());
-    return gregorianToJalali(_correctedNow());
+    try {
+      final corrected = _correctedNowOrNull();
+      // اگر به هر دلیلی محاسبه لحظه اصلاح‌شده ممکن نبود، همان تاریخی که
+      // کاربر دستی ثبت کرده نمایش داده می‌شود، نه تاریخ واقعی و اشتباه گوشی.
+      return corrected != null ? gregorianToJalali(corrected) : configuredDate;
+    } catch (_) {
+      return configuredDate;
+    }
   }
 
   static String currentTime() {
@@ -469,8 +487,15 @@ class AppSettings {
       final now = DateTime.now();
       return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     }
-    final corrected = _correctedNow();
-    return '${corrected.hour.toString().padLeft(2, '0')}:${corrected.minute.toString().padLeft(2, '0')}';
+    try {
+      final corrected = _correctedNowOrNull();
+      if (corrected != null) {
+        return '${corrected.hour.toString().padLeft(2, '0')}:${corrected.minute.toString().padLeft(2, '0')}';
+      }
+    } catch (_) {}
+    if (configuredTime.isNotEmpty) return configuredTime;
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
   static Map<String, dynamic> exportSettings() => {
@@ -936,13 +961,14 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                 DashboardButton(
                   title: 'تنظیمات',
                   icon: Icons.settings,
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => const SettingsPage(),
                       ),
                     );
+                    if (mounted) setState(() {});
                   },
                 ),
               ],
@@ -2704,6 +2730,11 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
   late final TextEditingController cityController;
   late final TextEditingController problemsController;
 
+  final ImagePicker imagePicker = ImagePicker();
+  final AudioRecorder audioRecorder = AudioRecorder();
+  late List<EvidenceFile> evidences;
+  bool recording = false;
+
   @override
   void initState() {
     super.initState();
@@ -2712,6 +2743,7 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
     nameController = TextEditingController(text: widget.inspection.agentName);
     cityController = TextEditingController(text: widget.inspection.city);
     problemsController = TextEditingController(text: widget.inspection.problems);
+    evidences = List<EvidenceFile>.from(widget.inspection.evidences);
   }
 
   @override
@@ -2722,6 +2754,108 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
     cityController.dispose();
     problemsController.dispose();
     super.dispose();
+  }
+
+  void showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> pickGalleryImages() async {
+    try {
+      final images = await imagePicker.pickMultiImage(imageQuality: 90);
+      if (images.isEmpty) return;
+      final directory = await getEvidenceDirectory();
+      for (final image in images) {
+        final extension = image.path.split('.').last;
+        final fileName = 'photo_${DateTime.now().millisecondsSinceEpoch}_${evidences.length}.$extension';
+        final destination = File('${directory.path}/$fileName');
+        await File(image.path).copy(destination.path);
+        evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در انتخاب عکس');
+    }
+  }
+
+  Future<void> takePhoto() async {
+    try {
+      final image = await imagePicker.pickImage(source: ImageSource.camera, imageQuality: 90);
+      if (image == null) return;
+      final directory = await getEvidenceDirectory();
+      final extension = image.path.split('.').last;
+      final fileName = 'camera_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final destination = File('${directory.path}/$fileName');
+      await File(image.path).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در گرفتن عکس');
+    }
+  }
+
+  Future<void> pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.first;
+      if (picked.path == null) {
+        showMessage('فایل قابل دسترسی نیست');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${picked.name}';
+      final destination = File('${directory.path}/$fileName');
+      await File(picked.path!).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'file', name: picked.name));
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در انتخاب فایل');
+    }
+  }
+
+  Future<void> startRecording() async {
+    try {
+      final hasPermission = await audioRecorder.hasPermission();
+      if (!hasPermission) {
+        showMessage('اجازه استفاده از میکروفون داده نشد');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final path = '${directory.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() => recording = true);
+    } catch (_) {
+      showMessage('خطا در شروع ضبط صدا');
+    }
+  }
+
+  Future<void> stopRecording() async {
+    try {
+      final path = await audioRecorder.stop();
+      if (mounted) setState(() => recording = false);
+      if (path != null && path.isNotEmpty) {
+        evidences.add(EvidenceFile(path: path, type: 'audio', name: 'فایل صوتی'));
+        if (mounted) setState(() {});
+      }
+    } catch (_) {
+      if (mounted) setState(() => recording = false);
+      showMessage('خطا در ذخیره فایل صوتی');
+    }
+  }
+
+  Future<void> removeEvidence(int index) async {
+    final evidence = evidences[index];
+    try {
+      final file = File(evidence.path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    setState(() => evidences.removeAt(index));
   }
 
   Widget field(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
@@ -2746,6 +2880,7 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
       agentName: nameController.text.trim(),
       city: cityController.text.trim(),
       problems: problemsController.text.trim(),
+      evidences: evidences,
     );
     Navigator.pop(context, updated);
   }
@@ -2762,6 +2897,58 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
           field('نام عامل', nameController, Icons.person),
           field('شهر محل بازرسی', cityController, Icons.location_city),
           field('شرح مشکلات', problemsController, Icons.warning_amber, maxLines: 5),
+          const Divider(height: 28),
+          const Text('مستندات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(onPressed: pickGalleryImages, icon: const Icon(Icons.photo_library), label: const Text('گالری')),
+              ElevatedButton.icon(onPressed: takePhoto, icon: const Icon(Icons.camera_alt), label: const Text('دوربین')),
+              ElevatedButton.icon(onPressed: pickFile, icon: const Icon(Icons.attach_file), label: const Text('فایل')),
+              ElevatedButton.icon(
+                onPressed: recording ? stopRecording : startRecording,
+                icon: Icon(recording ? Icons.stop_circle : Icons.mic),
+                label: Text(recording ? 'توقف ضبط' : 'ضبط صدا'),
+                style: recording ? ElevatedButton.styleFrom(backgroundColor: Colors.redAccent) : null,
+              ),
+            ],
+          ),
+          if (recording) ...[
+            const SizedBox(height: 10),
+            const Row(children: [
+              Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 14),
+              SizedBox(width: 8),
+              Text('در حال ضبط صدا...', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            ]),
+          ],
+          const SizedBox(height: 12),
+          if (evidences.isEmpty)
+            const Text('هنوز مستندی اضافه نشده است.', style: TextStyle(color: Colors.grey))
+          else
+            ...List.generate(evidences.length, (index) {
+              final evidence = evidences[index];
+              IconData icon;
+              if (evidence.type == 'image') {
+                icon = Icons.image;
+              } else if (evidence.type == 'audio') {
+                icon = Icons.audiotrack;
+              } else {
+                icon = Icons.insert_drive_file;
+              }
+              return Card(
+                child: ListTile(
+                  leading: Icon(icon, color: const Color(0xFFC9A227)),
+                  title: Text(evidence.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  onTap: () => openEvidence(context, evidence),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: () => removeEvidence(index),
+                  ),
+                ),
+              );
+            }),
           const SizedBox(height: 8),
           SizedBox(
             height: 52,
@@ -5174,14 +5361,11 @@ class _CityInspectionsPageState extends State<CityInspectionsPage> {
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
       final fileName = 'گزارش_${widget.city}_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
-      if (savedPath == null || savedPath.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره فایل لغو شد.')));
-        return;
-      }
-      final result = await OpenFilex.open(savedPath);
+      final savedPath = await previewThenSaveExportFile(bytes: bytes, fileName: fileName);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.type == ResultType.done ? 'خروجی Excel در حافظه گوشی ذخیره شد.' : 'خروجی Excel ذخیره شد.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(savedPath == null ? 'ذخیره فایل لغو شد.' : 'فایل Excel ساخته، باز و سپس در حافظه گوشی ذخیره شد.')),
+        );
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
@@ -5505,7 +5689,13 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     await AppSettings.setDateAndTime(_toEnglishDigits(date), _toEnglishDigits(time));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ و ساعت ذخیره شد و در تمام بخش‌های برنامه اعمال می‌شود')));
+    if (mounted) {
+      setState(() {
+        _dateController.text = AppSettings.configuredDate;
+        _timeController.text = AppSettings.configuredTime;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تاریخ و ساعت ذخیره شد و در تمام بخش‌های برنامه اعمال می‌شود')));
+    }
   }
 
   String _toEnglishDigits(String value) => value.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
