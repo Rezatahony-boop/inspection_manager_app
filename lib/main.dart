@@ -30,11 +30,9 @@ Future<void> main() async {
 class InspectionManagerApp extends StatelessWidget {
   const InspectionManagerApp({super.key});
 
-  static const Color goldColor = Color(0xFFB8912B);
-  static const Color darkNavy = Color(0xFF03070E);
-  static const Color cardNavy = Color(0xFF0B1425);
-  static const Color okGreen = Color(0xFF1B5E20);
-  static const Color problemMaroon = Color(0xFF7A1428);
+  static const Color goldColor = Color(0xFFD4AF37);
+  static const Color darkNavy = Color(0xFF060D1A);
+  static const Color cardNavy = Color(0xFF0F1B30);
 
   @override
   Widget build(BuildContext context) {
@@ -108,8 +106,8 @@ class InspectionManagerApp extends StatelessWidget {
         ),
         textTheme: ThemeData.dark().textTheme.apply(
               
-              bodyColor: const Color(0xFFDDBE73),
-              displayColor: const Color(0xFFDDBE73),
+              bodyColor: const Color(0xFFEFE7D2),
+              displayColor: const Color(0xFFEFE7D2),
             ),
         dividerColor: const Color(0x33D4AF37),
         snackBarTheme: const SnackBarThemeData(
@@ -132,97 +130,6 @@ const String _defaultManagementLogoBase64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQ
 // =====================================================
 // تبدیل تاریخ شمسی به میلادی
 // =====================================================
-// =====================================================
-// تبدیل دقیق تاریخ شمسی <-> میلادی (الگوریتم استاندارد و آزمایش‌شده،
-// هر دو جهت از یک منبع مشترک محاسبه می‌شوند تا رفت‌وبرگشت تاریخ
-// همیشه دقیقاً همان روزی باشد که کاربر وارد کرده است)
-// =====================================================
-
-int _calDiv(int a, int b) {
-  final q = a ~/ b;
-  if ((a % b != 0) && ((a < 0) != (b < 0))) return q + 1;
-  return q;
-}
-
-int _calMod(int a, int b) => a - _calDiv(a, b) * b;
-
-const List<int> _jalaliBreaks = [
-  -61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178,
-];
-
-List<int> _jalCal(int jy) {
-  final bl = _jalaliBreaks.length;
-  final gy = jy + 621;
-  var leapJ = -14;
-  var jp = _jalaliBreaks[0];
-  var jump = 0;
-  var i = 1;
-  while (i < bl) {
-    final jm = _jalaliBreaks[i];
-    jump = jm - jp;
-    if (jy < jm) break;
-    leapJ = leapJ + _calDiv(jump, 33) * 8 + _calDiv(_calMod(jump, 33), 4);
-    jp = jm;
-    i++;
-  }
-  var n = jy - jp;
-  leapJ = leapJ + _calDiv(n, 33) * 8 + _calDiv(_calMod(n, 33) + 3, 4);
-  if (_calMod(jump, 33) == 4 && jump - n == 4) leapJ += 1;
-  final leapG = _calDiv(gy, 4) - _calDiv((_calDiv(gy, 100) + 1) * 3, 4) - 150;
-  final march = 20 + leapJ - leapG;
-  if (jump - n < 6) n = n - jump + _calDiv(jump, 33) * 33;
-  var leap = _calMod(_calMod(n + 1, 33) - 1, 4);
-  if (leap == -1) leap = 4;
-  return [leap, gy, march];
-}
-
-int _g2d(int gy, int gm, int gd) {
-  var d = _calDiv((gy + _calDiv(gm - 8, 6) + 100100) * 1461, 4) + _calDiv(153 * _calMod(gm + 9, 12) + 2, 5) + gd - 34840408;
-  d = d - _calDiv(_calDiv(gy + 100100 + _calDiv(gm - 8, 6), 100) * 3, 4) + 752;
-  return d;
-}
-
-List<int> _d2g(int jdn) {
-  var j = 4 * jdn + 139361631;
-  j = j + _calDiv(_calDiv(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
-  final i = _calDiv(_calMod(j, 1461), 4) * 5 + 308;
-  final gd = _calDiv(_calMod(i, 153), 5) + 1;
-  final gm = _calMod(_calDiv(i, 153), 12) + 1;
-  final gy = _calDiv(j, 1461) - 100100 + _calDiv(8 - gm, 6);
-  return [gy, gm, gd];
-}
-
-int _j2d(int jy, int jm, int jd) {
-  final r = _jalCal(jy);
-  return _g2d(r[1], 3, r[2]) + (jm - 1) * 31 - _calDiv(jm, 7) * (jm - 7) + jd - 1;
-}
-
-List<int> _d2j(int jdn) {
-  final g = _d2g(jdn);
-  var jy = g[0] - 621;
-  final r = _jalCal(jy);
-  final jdn1f = _g2d(r[1], 3, r[2]);
-  var k = jdn - jdn1f;
-  int jm;
-  int jd;
-  if (k >= 0) {
-    if (k <= 185) {
-      jm = 1 + _calDiv(k, 31);
-      jd = _calMod(k, 31) + 1;
-      return [jy, jm, jd];
-    } else {
-      k -= 186;
-    }
-  } else {
-    jy -= 1;
-    k += 179;
-    if (_jalCal(jy)[0] == 1) k += 1;
-  }
-  jm = 7 + _calDiv(k, 30);
-  jd = _calMod(k, 30) + 1;
-  return [jy, jm, jd];
-}
-
 DateTime jalaliToGregorianDate(String value) {
   final normalized = value
       .replaceAll('۰', '0').replaceAll('۱', '1').replaceAll('۲', '2')
@@ -234,12 +141,42 @@ DateTime jalaliToGregorianDate(String value) {
       .replaceAll('٨', '8').replaceAll('٩', '9');
   final p = normalized.split('/');
   if (p.length != 3) return DateTime(2000, 1, 1);
-  final jy = int.tryParse(p[0]) ?? 1405;
+  int jy = int.tryParse(p[0]) ?? 1405;
   final jm = int.tryParse(p[1]) ?? 1;
   final jd = int.tryParse(p[2]) ?? 1;
-  final jdn = _j2d(jy, jm, jd);
-  final g = _d2g(jdn);
-  return DateTime(g[0], g[1], g[2]);
+  jy -= 979;
+  var jDayNo = 365 * jy + (jy ~/ 33) * 8 + ((jy % 33) + 3) ~/ 4;
+  if (jm <= 6) {
+    jDayNo += (jm - 1) * 31;
+  } else {
+    jDayNo += (jm - 7) * 30 + 186;
+  }
+  jDayNo += jd - 1;
+  var gDayNo = jDayNo + 79;
+  var gy = 1600 + 400 * (gDayNo ~/ 146097);
+  gDayNo %= 146097;
+  bool leap = true;
+  if (gDayNo >= 36525) {
+    gDayNo--;
+    gy += 100 * (gDayNo ~/ 36524);
+    gDayNo %= 36524;
+    if (gDayNo >= 365) gDayNo++; else leap = false;
+  }
+  gy += 4 * (gDayNo ~/ 1461);
+  gDayNo %= 1461;
+  if (gDayNo >= 366) {
+    leap = false;
+    gDayNo--;
+    gy += gDayNo ~/ 365;
+    gDayNo %= 365;
+  }
+  final monthDays = <int>[31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var gm = 1;
+  while (gm <= 12 && gDayNo >= monthDays[gm - 1]) {
+    gDayNo -= monthDays[gm - 1];
+    gm++;
+  }
+  return DateTime(gy, gm, gDayNo + 1);
 }
 
 // =====================================================
@@ -260,11 +197,81 @@ String toPersianDigits(String text) {
 String toPersian(String value) => toPersianDigits(value);
 
 String gregorianToJalali(DateTime date) {
-  final jdn = _g2d(date.year, date.month, date.day);
-  final j = _d2j(jdn);
+  int gy = date.year;
+  int gm = date.month;
+  int gd = date.day;
+
+  int jy;
+  int jm;
+  int jd;
+
+  final gDayNo = _gregorianDayNumber(gy, gm, gd);
+  final jDayNo = gDayNo - _gregorianDayNumber(1600, 3, 21);
+
+  final jNp = jDayNo ~/ 12053;
+  var jDay = jDayNo % 12053;
+
+  jy = 979 + 33 * jNp + 4 * (jDay ~/ 1461);
+  jDay %= 1461;
+
+  if (jDay >= 366) {
+    jy += (jDay - 1) ~/ 365;
+    jDay = (jDay - 1) % 365;
+  }
+
+  if (jDay < 186) {
+    jm = 1 + jDay ~/ 31;
+    jd = 1 + jDay % 31;
+  } else {
+    jm = 7 + (jDay - 186) ~/ 30;
+    jd = 1 + (jDay - 186) % 30;
+  }
+
   return toPersianDigits(
-    '${j[0]}/${j[1].toString().padLeft(2, '0')}/${j[2].toString().padLeft(2, '0')}',
+    '$jy/${jm.toString().padLeft(2, '0')}/${jd.toString().padLeft(2, '0')}',
   );
+}
+
+int _gregorianDayNumber(int gy, int gm, int gd) {
+  final gy2 = gy + ((gm > 2) ? 1 : 0);
+
+  return (365 * gy) +
+      ((gy2 + 3) ~/ 4) -
+      ((gy2 + 99) ~/ 100) +
+      ((gy2 + 399) ~/ 400) +
+      gd +
+      _gregorianMonthDays(gm, gy);
+}
+
+int _gregorianMonthDays(int gm, int gy) {
+  const mdays = [
+    0,
+    0,
+    31,
+    59,
+    90,
+    120,
+    151,
+    181,
+    212,
+    243,
+    273,
+    304,
+    334,
+  ];
+
+  int result = mdays[gm];
+
+  if (gm > 2 && _isGregorianLeap(gy)) {
+    result++;
+  }
+
+  return result;
+}
+
+bool _isGregorianLeap(int year) {
+  return year % 4 == 0 &&
+      (year % 100 != 0 || year % 400 == 0);
 }
 
 // =====================================================
@@ -4762,9 +4769,7 @@ class _ReportsPageState extends State<ReportsPage> {
     required String title,
     required String value,
     required IconData icon,
-    Color? accentColor,
   }) {
-    final color = accentColor ?? const Color(0xFFC9A227);
     return Card(
       color: const Color(0xFF101B2E),
       child: Padding(
@@ -4775,14 +4780,14 @@ class _ReportsPageState extends State<ReportsPage> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: color,
+                color: const Color(0xFFC9A227),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: Colors.black),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-            Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(value, style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -5002,7 +5007,7 @@ class _ReportsPageState extends State<ReportsPage> {
           ),
         ),
         _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('$noProblems'), icon: Icons.check_circle_outline),
-        _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent, accentColor: InspectionManagerApp.problemMaroon),
+        _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent),
       ],
     );
   }
@@ -5474,7 +5479,7 @@ class _CityInspectionsPageState extends State<CityInspectionsPage> {
                 final hasProblem = item.problems.trim().isNotEmpty;
                 return Card(
                   child: ListTile(
-                    leading: Icon(hasProblem ? Icons.warning_amber : Icons.check_circle, color: hasProblem ? InspectionManagerApp.problemMaroon : InspectionManagerApp.okGreen),
+                    leading: Icon(hasProblem ? Icons.warning_amber : Icons.check_circle, color: hasProblem ? Colors.orange : Colors.green),
                     title: Text('${item.agentName} (${item.agentCode})'),
                     subtitle: Text('${item.date}\n${hasProblem ? item.problems : 'بدون مشکل'}'),
                     isThreeLine: true,
@@ -5588,7 +5593,7 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
                       final item = problems[index];
                       return Card(
                         child: ListTile(
-                          leading: const Icon(Icons.warning_amber_rounded, color: InspectionManagerApp.problemMaroon),
+                          leading: const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
                           title: Text(item.agentName.isEmpty ? item.agentCode : item.agentName),
                           subtitle: Text('کد عامل: ${item.agentCode}\nتاریخ: ${item.date}\nشهر: ${item.city.isEmpty ? 'ثبت نشده' : item.city}\nمستندات: ${item.evidences.length} فایل\n${item.problems}'),
                           isThreeLine: true,
