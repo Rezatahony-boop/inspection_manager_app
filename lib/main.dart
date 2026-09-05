@@ -30,6 +30,10 @@ Future<void> main() async {
 class InspectionManagerApp extends StatelessWidget {
   const InspectionManagerApp({super.key});
 
+  static const Color goldColor = Color(0xFFD4AF37);
+  static const Color darkNavy = Color(0xFF060D1A);
+  static const Color cardNavy = Color(0xFF0F1B30);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -37,16 +41,83 @@ class InspectionManagerApp extends StatelessWidget {
       title: 'سامانه مدیریت بازرسی',
       theme: ThemeData(
         useMaterial3: true,
+        
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFC9A227),
+          seedColor: goldColor,
           brightness: Brightness.dark,
+          primary: goldColor,
+          secondary: goldColor,
+          surface: cardNavy,
         ),
-        scaffoldBackgroundColor: const Color(0xFF08111F),
+        scaffoldBackgroundColor: darkNavy,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF08111F),
-          foregroundColor: Colors.white,
+          backgroundColor: darkNavy,
+          foregroundColor: goldColor,
           centerTitle: true,
+          elevation: 0,
+          titleTextStyle: TextStyle(color: goldColor, fontSize: 19, fontWeight: FontWeight.bold),
+          iconTheme: IconThemeData(color: goldColor),
         ),
+        cardTheme: CardThemeData(
+          color: cardNavy,
+          elevation: 3,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0x33D4AF37), width: 1),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: goldColor,
+            foregroundColor: darkNavy,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            textStyle: const TextStyle(fontWeight: FontWeight.bold,  fontSize: 15),
+            elevation: 2,
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: goldColor,
+            side: const BorderSide(color: goldColor, width: 1.4),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        iconTheme: const IconThemeData(color: goldColor),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: cardNavy,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0x55D4AF37)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0x55D4AF37)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: goldColor, width: 1.6),
+          ),
+          labelStyle: const TextStyle(color: Color(0xFFCBB98C)),
+          prefixIconColor: goldColor,
+        ),
+        textTheme: ThemeData.dark().textTheme.apply(
+              
+              bodyColor: const Color(0xFFEFE7D2),
+              displayColor: const Color(0xFFEFE7D2),
+            ),
+        dividerColor: const Color(0x33D4AF37),
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: cardNavy,
+          contentTextStyle: TextStyle(color: Color(0xFFEFE7D2)),
+        ),
+        listTileTheme: const ListTileThemeData(
+          iconColor: goldColor,
+        ),
+        dialogTheme: const DialogThemeData(backgroundColor: cardNavy),
       ),
       home: const LoginPage(),
     );
