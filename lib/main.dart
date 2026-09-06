@@ -9,7 +9,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide TextSpan;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
