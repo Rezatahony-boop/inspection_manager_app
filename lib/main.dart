@@ -30,9 +30,23 @@ Future<void> main() async {
 class InspectionManagerApp extends StatelessWidget {
   const InspectionManagerApp({super.key});
 
-  static const Color goldColor = Color(0xFFD4AF37);
-  static const Color darkNavy = Color(0xFF060D1A);
-  static const Color cardNavy = Color(0xFF0F1B30);
+  // ===================================================
+  // Design System مرکزی برنامه — تغییر رنگ‌ها فقط از همینجا
+  // ===================================================
+  static const Color bgColor = Color(0xFF07111F);
+  static const Color cardColor = Color(0xFF102238);
+  static const Color primaryColor = Color(0xFF19B5A5); // فیروزه‌ای - رنگ اصلی
+  static const Color accentColor = Color(0xFFF2B84B); // طلایی - فقط برای تأکید/هشدار/درصد
+  static const Color textPrimary = Color(0xFFF5F7FA);
+  static const Color textSecondary = Color(0xFFAEBBCB);
+  static const Color borderColor = Color(0xFF263B52);
+  static const Color okGreen = Color(0xFF1E9E6B);
+  static const Color problemMaroon = Color(0xFFE0546A);
+
+  // نگه‌داشته‌شده برای سازگاری با کدهای قدیمی‌تر که به این نام‌ها ارجاع می‌دهند
+  static const Color goldColor = accentColor;
+  static const Color darkNavy = bgColor;
+  static const Color cardNavy = cardColor;
 
   @override
   Widget build(BuildContext context) {
@@ -41,83 +55,100 @@ class InspectionManagerApp extends StatelessWidget {
       title: 'سامانه مدیریت بازرسی',
       theme: ThemeData(
         useMaterial3: true,
-        
         colorScheme: ColorScheme.fromSeed(
-          seedColor: goldColor,
+          seedColor: primaryColor,
           brightness: Brightness.dark,
-          primary: goldColor,
-          secondary: goldColor,
-          surface: cardNavy,
+          primary: primaryColor,
+          secondary: accentColor,
+          surface: cardColor,
         ),
-        scaffoldBackgroundColor: darkNavy,
+        scaffoldBackgroundColor: bgColor,
         appBarTheme: const AppBarTheme(
-          backgroundColor: darkNavy,
-          foregroundColor: goldColor,
+          backgroundColor: bgColor,
+          foregroundColor: textPrimary,
           centerTitle: true,
           elevation: 0,
-          titleTextStyle: TextStyle(color: goldColor, fontSize: 19, fontWeight: FontWeight.bold),
-          iconTheme: IconThemeData(color: goldColor),
+          titleTextStyle: TextStyle(color: primaryColor, fontSize: 19, fontWeight: FontWeight.bold),
+          iconTheme: IconThemeData(color: primaryColor),
         ),
         cardTheme: CardThemeData(
-          color: cardNavy,
-          elevation: 3,
+          color: cardColor,
+          elevation: 0,
           margin: const EdgeInsets.symmetric(vertical: 6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0x33D4AF37), width: 1),
+            side: const BorderSide(color: borderColor, width: 1),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: goldColor,
-            foregroundColor: darkNavy,
+            backgroundColor: primaryColor,
+            foregroundColor: bgColor,
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            textStyle: const TextStyle(fontWeight: FontWeight.bold,  fontSize: 15),
-            elevation: 2,
+            textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            elevation: 0,
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
-            foregroundColor: goldColor,
-            side: const BorderSide(color: goldColor, width: 1.4),
+            foregroundColor: primaryColor,
+            side: const BorderSide(color: primaryColor, width: 1.4),
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
-        iconTheme: const IconThemeData(color: goldColor),
+        checkboxTheme: CheckboxThemeData(
+          fillColor: WidgetStateProperty.resolveWith((states) =>
+              states.contains(WidgetState.selected) ? primaryColor : Colors.transparent),
+          checkColor: const WidgetStatePropertyAll(bgColor),
+          side: const BorderSide(color: borderColor, width: 1.4),
+        ),
+        iconTheme: const IconThemeData(color: primaryColor),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: cardNavy,
+          fillColor: cardColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0x55D4AF37)),
+            borderSide: const BorderSide(color: borderColor),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0x55D4AF37)),
+            borderSide: const BorderSide(color: borderColor),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: goldColor, width: 1.6),
+            borderSide: const BorderSide(color: primaryColor, width: 1.6),
           ),
-          labelStyle: const TextStyle(color: Color(0xFFCBB98C)),
-          prefixIconColor: goldColor,
+          labelStyle: const TextStyle(color: textSecondary),
+          hintStyle: const TextStyle(color: textSecondary),
+          prefixIconColor: primaryColor,
         ),
         textTheme: ThemeData.dark().textTheme.apply(
-              
-              bodyColor: const Color(0xFFEFE7D2),
-              displayColor: const Color(0xFFEFE7D2),
+              bodyColor: textPrimary,
+              displayColor: textPrimary,
             ),
-        dividerColor: const Color(0x33D4AF37),
+        dividerColor: borderColor,
         snackBarTheme: const SnackBarThemeData(
-          backgroundColor: cardNavy,
-          contentTextStyle: TextStyle(color: Color(0xFFEFE7D2)),
+          backgroundColor: cardColor,
+          contentTextStyle: TextStyle(color: textPrimary),
         ),
         listTileTheme: const ListTileThemeData(
-          iconColor: goldColor,
+          iconColor: primaryColor,
+          textColor: textPrimary,
         ),
-        dialogTheme: const DialogThemeData(backgroundColor: cardNavy),
+        dialogTheme: const DialogThemeData(backgroundColor: cardColor),
+        dropdownMenuTheme: DropdownMenuThemeData(
+          menuStyle: MenuStyle(backgroundColor: const WidgetStatePropertyAll(cardColor)),
+        ),
+        chipTheme: ChipThemeData(
+          backgroundColor: cardColor,
+          selectedColor: primaryColor,
+          side: const BorderSide(color: borderColor),
+          labelStyle: const TextStyle(color: textPrimary),
+          secondaryLabelStyle: const TextStyle(color: bgColor),
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(color: primaryColor),
       ),
       home: const LoginPage(),
     );
@@ -799,13 +830,13 @@ class _LoginPageState extends State<LoginPage> {
               const Icon(
                 Icons.verified_user,
                 size: 82,
-                color: Color(0xFFC9A227),
+                color: Color(0xFF19B5A5),
               ),
               const SizedBox(height: 20),
               const Text(
                 'سامانه مدیریت بازرسی',
                 style: TextStyle(
-                  color: Color(0xFFC9A227),
+                  color: Color(0xFF19B5A5),
                   fontSize: 25,
                   fontWeight: FontWeight.bold,
                 ),
@@ -868,7 +899,7 @@ class DashboardButton extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 38, color: const Color(0xFFC9A227)),
+              Icon(icon, size: 38, color: const Color(0xFF19B5A5)),
               const SizedBox(height: 10),
               Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
@@ -908,7 +939,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     final hasPhoto = AppSettings.profileImagePath.isNotEmpty && File(AppSettings.profileImagePath).existsSync();
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -926,7 +957,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                   Text(AppSettings.inspectorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 4),
                   Row(children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFFC9A227)),
+                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFF19B5A5)),
                     const SizedBox(width: 6),
                     Text('امروز: ${toPersianDigits(AppSettings.todayJalali())}'),
                   ]),
@@ -1246,7 +1277,7 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
                 const SizedBox(height: 16),
                 if (_codeController.text.trim().isNotEmpty && _results.isNotEmpty) ...[
                   Card(
-                    color: const Color(0xFF101B2E),
+                    color: const Color(0xFF102238),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -1267,7 +1298,7 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
                   const SizedBox(height: 8),
                   ..._results.map((item) => Card(
                     child: ListTile(
-                      leading: const Icon(Icons.assignment, color: Color(0xFFC9A227)),
+                      leading: const Icon(Icons.assignment, color: Color(0xFF19B5A5)),
                       title: Text('تاریخ: ${item.date}'),
                       subtitle: Text('شهر: ${item.city.isEmpty ? 'ثبت نشده' : item.city}\nمشکلات: ${item.problems.isEmpty ? 'بدون مشکل' : item.problems}'),
                       isThreeLine: true,
@@ -1654,7 +1685,7 @@ class _NewInspectionPageState
 
   Widget evidenceSection() {
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1666,13 +1697,13 @@ class _NewInspectionPageState
               children: [
                 Icon(
                   Icons.attach_file,
-                  color: Color(0xFFC9A227),
+                  color: Color(0xFF19B5A5),
                 ),
                 SizedBox(width: 8),
                 Text(
                   'ثبت مستندات',
                   style: TextStyle(
-                    color: Color(0xFFC9A227),
+                    color: Color(0xFF19B5A5),
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -1789,7 +1820,7 @@ class _NewInspectionPageState
                     leading: Icon(
                       icon,
                       color:
-                          const Color(0xFFC9A227),
+                          const Color(0xFF19B5A5),
                     ),
                     title: Text(
                       evidence.name,
@@ -2112,7 +2143,7 @@ class _ArchivePageState extends State<ArchivePage> {
                       child: ListTile(
                         leading: const Icon(
                           Icons.folder,
-                          color: Color(0xFFC9A227),
+                          color: Color(0xFF19B5A5),
                           size: 32,
                         ),
                         title: Text(
@@ -2254,7 +2285,7 @@ class _MonthArchivePageState extends State<MonthArchivePage> {
                   child: ListTile(
                     leading: const Icon(
                       Icons.calendar_month,
-                      color: Color(0xFFC9A227),
+                      color: Color(0xFF19B5A5),
                       size: 30,
                     ),
                     title: Text(
@@ -2432,7 +2463,7 @@ class _DailyArchivePageState extends State<DailyArchivePage> {
                       return Card(
                         child: ListTile(
                           leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFC9A227),
+                            backgroundColor: Color(0xFF19B5A5),
                             child: Icon(Icons.assignment, color: Colors.black),
                           ),
                           title: Text(item.agentCode),
@@ -2616,7 +2647,7 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
           ),
           if (searchedDate.isNotEmpty) ...[
             const SizedBox(height: 18),
-            Text('نتیجه برای تاریخ ${toPersian(normalizeDate(searchedDate))}', style: const TextStyle(color: Color(0xFFC9A227), fontSize: 19, fontWeight: FontWeight.bold)),
+            Text('نتیجه برای تاریخ ${toPersian(normalizeDate(searchedDate))}', style: const TextStyle(color: Color(0xFF19B5A5), fontSize: 19, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             if (results.isEmpty)
               const Card(child: Padding(padding: EdgeInsets.all(18), child: Text('برای این تاریخ بازرسی‌ای ثبت نشده است.')))
@@ -2642,9 +2673,9 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
                 for (final item in data) cityRepeated[item.agentCode] = (cityRepeated[item.agentCode] ?? 0) + 1;
                 final repeatedCount = cityRepeated.values.where((v) => v >= 2).length;
                 return Card(
-                  color: const Color(0xFF101B2E),
+                  color: const Color(0xFF102238),
                   child: ListTile(
-                    leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
+                    leading: const Icon(Icons.location_city, color: Color(0xFF19B5A5)),
                     title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text('تعداد بازرسی: ${data.length}  •  تعداد مشکلات: $problemCount  •  عوامل تکراری: $repeatedCount'),
                     trailing: const Icon(Icons.chevron_right),
@@ -2664,15 +2695,15 @@ class _DateArchiveSearchPageState extends State<DateArchiveSearchPage> {
 
   Widget _summaryCard(String title, String value, IconData icon) {
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(children: [
-          Icon(icon, color: const Color(0xFFC9A227), size: 30),
+          Icon(icon, color: const Color(0xFF19B5A5), size: 30),
           const SizedBox(height: 6),
           Text(title, textAlign: TextAlign.center),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: Color(0xFFC9A227), fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(value, style: const TextStyle(color: Color(0xFF19B5A5), fontSize: 24, fontWeight: FontWeight.bold)),
         ]),
       ),
     );
@@ -3010,7 +3041,7 @@ class _EditInspectionPageState extends State<EditInspectionPage> {
               }
               return Card(
                 child: ListTile(
-                  leading: Icon(icon, color: const Color(0xFFC9A227)),
+                  leading: Icon(icon, color: const Color(0xFF19B5A5)),
                   title: Text(evidence.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                   onTap: () => openEvidence(context, evidence),
                   trailing: IconButton(
@@ -3075,7 +3106,7 @@ class EvidenceViewer
 
     return Card(
       color:
-          const Color(0xFF101B2E),
+          const Color(0xFF102238),
       child: Padding(
         padding:
             const EdgeInsets.all(14),
@@ -3088,14 +3119,14 @@ class EvidenceViewer
                 Icon(
                   Icons.folder_special,
                   color:
-                      Color(0xFFC9A227),
+                      Color(0xFF19B5A5),
                 ),
                 SizedBox(width: 8),
                 Text(
                   'مستندات ثبت‌شده',
                   style: TextStyle(
                     color:
-                        Color(0xFFC9A227),
+                        Color(0xFF19B5A5),
                     fontSize: 18,
                     fontWeight:
                         FontWeight.bold,
@@ -3209,7 +3240,7 @@ class EvidenceTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(
           icon,
-          color: const Color(0xFFC9A227),
+          color: const Color(0xFF19B5A5),
         ),
         title: Text(
           evidence.name,
@@ -3318,7 +3349,7 @@ class InfoCard
               style:
                   const TextStyle(
                 color:
-                    Color(0xFFC9A227),
+                    Color(0xFF19B5A5),
                 fontWeight:
                     FontWeight.bold,
               ),
@@ -3616,7 +3647,7 @@ final m = int.tryParse(
                   child: ListTile(
                     leading: const CircleAvatar(
                       backgroundColor:
-                          Color(0xFFC9A227),
+                          Color(0xFF19B5A5),
                       child: Icon(
                         Icons.repeat,
                         color: Colors.black,
@@ -3678,7 +3709,7 @@ final m = int.tryParse(
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Card(
-                    color: const Color(0xFF101B2E),
+                    color: const Color(0xFF102238),
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Row(
@@ -3695,7 +3726,7 @@ final m = int.tryParse(
                             groups.length.toString(),
                             style: const TextStyle(
                               color:
-                                  Color(0xFFC9A227),
+                                  Color(0xFF19B5A5),
                               fontSize: 28,
                               fontWeight:
                                   FontWeight.bold,
@@ -3728,7 +3759,7 @@ final m = int.tryParse(
                               const Icon(
                             Icons.store,
                             color:
-                                Color(0xFFC9A227),
+                                Color(0xFF19B5A5),
                           ),
                           title: Text(
                             code,
@@ -3804,7 +3835,7 @@ class RepeatedDatesPage extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         children: [
           Card(
-            color: const Color(0xFF101B2E),
+            color: const Color(0xFF102238),
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -3812,7 +3843,7 @@ class RepeatedDatesPage extends StatelessWidget {
                   const Icon(
                     Icons.repeat,
                     size: 50,
-                    color: Color(0xFFC9A227),
+                    color: Color(0xFF19B5A5),
                   ),
                   const SizedBox(height: 10),
                   Text(
@@ -3820,7 +3851,7 @@ class RepeatedDatesPage extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFC9A227),
+                      color: Color(0xFF19B5A5),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3847,7 +3878,7 @@ class RepeatedDatesPage extends StatelessWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor:
-                        const Color(0xFFC9A227),
+                        const Color(0xFF19B5A5),
                     child: Text(
                       '${index + 1}',
                       style: const TextStyle(
@@ -4239,7 +4270,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
     required VoidCallback? onTap,
   }) {
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
@@ -4247,7 +4278,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
           padding: const EdgeInsets.all(14),
           child: Column(
             children: [
-              Icon(icon, color: const Color(0xFFC9A227), size: 34),
+              Icon(icon, color: const Color(0xFF19B5A5), size: 34),
               const SizedBox(height: 8),
               Text(
                 title,
@@ -4258,7 +4289,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
               Text(
                 toPersianDigits(value),
                 style: const TextStyle(
-                  color: Color(0xFFC9A227),
+                  color: Color(0xFF19B5A5),
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
@@ -4307,7 +4338,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   Card(
-                    color: const Color(0xFF101B2E),
+                    color: const Color(0xFF102238),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(
@@ -4316,7 +4347,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                           const Text(
                             'تاریخ عملکرد',
                             style: TextStyle(
-                              color: Color(0xFFC9A227),
+                              color: Color(0xFF19B5A5),
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
@@ -4370,7 +4401,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                     'گزارش عملکرد ${toPersianDigits(_normalizeDate(dateController.text))}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: Color(0xFFC9A227),
+                      color: Color(0xFF19B5A5),
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
@@ -4410,7 +4441,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                     )
                   else ...[
                     Card(
-                      color: const Color(0xFF101B2E),
+                      color: const Color(0xFF102238),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(
@@ -4419,7 +4450,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                             const Text(
                               'شهرهای محل بازرسی',
                               style: TextStyle(
-                                color: Color(0xFFC9A227),
+                                color: Color(0xFF19B5A5),
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -4434,7 +4465,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
                                 child: ListTile(
                                   leading: const Icon(
                                     Icons.location_city,
-                                    color: Color(0xFFC9A227),
+                                    color: Color(0xFF19B5A5),
                                   ),
                                   title: Text(
                                     entry.key,
@@ -4480,6 +4511,316 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
 // =====================================================
 // گزارش‌ها و آمار پیشرفته
 // =====================================================
+
+// =====================================================
+// نمودارهای واقعی صفحه آمار و گزارش‌ها (بدون نیاز به پکیج خارجی)
+// =====================================================
+
+class _BarChartCard extends StatelessWidget {
+  final String title;
+  final List<String> labels;
+  final List<double> values;
+  final Color barColor;
+  final bool isPercent;
+
+  const _BarChartCard({
+    required this.title,
+    required this.labels,
+    required this.values,
+    required this.barColor,
+    this.isPercent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = values.isEmpty ? 1.0 : values.reduce((a, b) => a > b ? a : b);
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 14),
+            if (values.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
+              )
+            else
+              SizedBox(
+                height: 160,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(labels.length, (i) {
+                    final ratio = (values[i] / safeMax).clamp(0.0, 1.0);
+                    final label = isPercent ? '${toPersianDigits(values[i].toStringAsFixed(0))}٪' : toPersianDigits(values[i].round().toString());
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(label, style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Expanded(
+                              child: FractionallySizedBox(
+                                heightFactor: ratio == 0 ? 0.02 : ratio,
+                                alignment: Alignment.bottomCenter,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: barColor,
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(labels[i], style: const TextStyle(fontSize: 11, color: InspectionManagerApp.textSecondary), overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LineChartCard extends StatelessWidget {
+  final String title;
+  final List<String> labels;
+  final List<double> values;
+
+  const _LineChartCard({required this.title, required this.labels, required this.values});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 10),
+            if (values.isEmpty || values.every((v) => v == 0))
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 30),
+                child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
+              )
+            else
+              SizedBox(
+                height: 170,
+                child: CustomPaint(
+                  size: const Size(double.infinity, 170),
+                  painter: _LineChartPainter(values: values, labels: labels),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LineChartPainter extends CustomPainter {
+  final List<double> values;
+  final List<String> labels;
+
+  _LineChartPainter({required this.values, required this.labels});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+    const bottomPad = 26.0;
+    const topPad = 18.0;
+    final chartHeight = size.height - bottomPad - topPad;
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+    final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    final stepX = values.length > 1 ? size.width / (values.length - 1) : size.width;
+
+    final linePaint = Paint()
+      ..color = InspectionManagerApp.primaryColor
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..color = InspectionManagerApp.primaryColor.withValues(alpha: 0.15)
+      ..style = PaintingStyle.fill;
+    final dotPaint = Paint()..color = InspectionManagerApp.primaryColor;
+    final gridPaint = Paint()
+      ..color = InspectionManagerApp.borderColor
+      ..strokeWidth = 1;
+
+    // خطوط راهنمای افقی
+    for (int i = 0; i <= 3; i++) {
+      final y = topPad + chartHeight * i / 3;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    final points = <Offset>[];
+    for (int i = 0; i < values.length; i++) {
+      final x = values.length > 1 ? stepX * i : size.width / 2;
+      final y = topPad + chartHeight - (values[i] / safeMax) * chartHeight;
+      points.add(Offset(x, y));
+    }
+
+    final fillPath = Path()..moveTo(points.first.dx, topPad + chartHeight);
+    for (final p in points) {
+      fillPath.lineTo(p.dx, p.dy);
+    }
+    fillPath.lineTo(points.last.dx, topPad + chartHeight);
+    fillPath.close();
+    canvas.drawPath(fillPath, fillPaint);
+
+    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final p in points.skip(1)) {
+      linePath.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(linePath, linePaint);
+
+    for (int i = 0; i < points.length; i++) {
+      canvas.drawCircle(points[i], 4, dotPaint);
+      final tp = TextPainter(
+        text: TextSpan(text: toPersianDigits(values[i].round().toString()), style: const TextStyle(color: InspectionManagerApp.textPrimary, fontSize: 11, fontWeight: FontWeight.bold)),
+        textDirection: TextDirection.rtl,
+      )..layout();
+      tp.paint(canvas, Offset(points[i].dx - tp.width / 2, points[i].dy - tp.height - 6));
+
+      if (i < labels.length) {
+        final lp = TextPainter(
+          text: TextSpan(text: labels[i], style: const TextStyle(color: InspectionManagerApp.textSecondary, fontSize: 10)),
+          textDirection: TextDirection.rtl,
+        )..layout();
+        lp.paint(canvas, Offset(points[i].dx - lp.width / 2, size.height - bottomPad + 6));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) =>
+      oldDelegate.values != values || oldDelegate.labels != labels;
+}
+
+class _DonutChartCard extends StatelessWidget {
+  final String title;
+  final int problemCount;
+  final int okCount;
+
+  const _DonutChartCard({required this.title, required this.problemCount, required this.okCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = problemCount + okCount;
+    final percent = total == 0 ? 0.0 : (problemCount / total) * 100;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CustomPaint(
+                        size: const Size(120, 120),
+                        painter: _DonutPainter(problemCount: problemCount, okCount: okCount),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('${toPersianDigits(percent.toStringAsFixed(0))}٪', style: const TextStyle(color: InspectionManagerApp.accentColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                          const Text('مشکلات', style: TextStyle(color: InspectionManagerApp.textSecondary, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _legendDot(InspectionManagerApp.problemMaroon, 'مشکلات', problemCount),
+                      const SizedBox(height: 10),
+                      _legendDot(InspectionManagerApp.primaryColor, 'بدون مشکل', okCount),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label, int value) {
+    return Row(
+      children: [
+        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(label)),
+        Text(toPersianDigits('$value'), style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+}
+
+class _DonutPainter extends CustomPainter {
+  final int problemCount;
+  final int okCount;
+
+  _DonutPainter({required this.problemCount, required this.okCount});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = problemCount + okCount;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    const strokeWidth = 16.0;
+    final rect = Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
+
+    final bgPaint = Paint()
+      ..color = InspectionManagerApp.borderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawArc(rect, 0, 6.2832, false, bgPaint);
+
+    if (total == 0) return;
+
+    final problemSweep = (problemCount / total) * 6.28318530718;
+    final problemPaint = Paint()
+      ..color = InspectionManagerApp.problemMaroon
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = strokeWidth;
+    canvas.drawArc(rect, -1.5707963268, problemSweep, false, problemPaint);
+
+    final okPaint = Paint()
+      ..color = InspectionManagerApp.primaryColor
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = strokeWidth;
+    canvas.drawArc(rect, -1.5707963268 + problemSweep, 6.28318530718 - problemSweep, false, okPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
+      oldDelegate.problemCount != problemCount || oldDelegate.okCount != okCount;
+}
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -4769,9 +5110,10 @@ class _ReportsPageState extends State<ReportsPage> {
     required String title,
     required String value,
     required IconData icon,
+    Color? accentColor,
   }) {
+    final color = accentColor ?? InspectionManagerApp.primaryColor;
     return Card(
-      color: const Color(0xFF101B2E),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -4780,14 +5122,14 @@ class _ReportsPageState extends State<ReportsPage> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: const Color(0xFFC9A227),
+                color: color,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Colors.black),
+              child: Icon(icon, color: InspectionManagerApp.bgColor),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-            Text(value, style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -4796,7 +5138,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _periodSelector() {
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Row(
@@ -4828,14 +5170,14 @@ class _ReportsPageState extends State<ReportsPage> {
       if (months.isEmpty) return const SizedBox.shrink();
       if (!months.contains(selectedMonth)) selectedMonth = months.first;
       return Card(
-        color: const Color(0xFF101B2E),
+        color: const Color(0xFF102238),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: selectedMonth,
               isExpanded: true,
-              dropdownColor: const Color(0xFF101B2E),
+              dropdownColor: const Color(0xFF102238),
               icon: const Icon(Icons.calendar_month),
               items: months.map((m) => DropdownMenuItem(value: m, child: Text(_monthName(m)))).toList(),
               onChanged: (v) => setState(() => selectedMonth = v ?? selectedMonth),
@@ -4846,7 +5188,7 @@ class _ReportsPageState extends State<ReportsPage> {
     }
 
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -4881,12 +5223,12 @@ class _ReportsPageState extends State<ReportsPage> {
     final cities = _cities;
     if (cities.isEmpty) return const SizedBox.shrink();
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       margin: const EdgeInsets.only(top: 20),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('انتخاب شهرها برای مقایسه', style: TextStyle(color: Color(0xFFC9A227), fontSize: 19, fontWeight: FontWeight.bold)),
+          const Text('انتخاب شهرها برای مقایسه', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 19, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text('${_toPersian('${selectedCities.length}')} شهر انتخاب شده'),
           CheckboxListTile(
@@ -4908,6 +5250,62 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
+  Widget _topStatCards() {
+    final records = _periodRecords;
+    final citiesInPeriod = <String>{};
+    for (final item in records) {
+      final c = item.city.trim();
+      if (c.isNotEmpty) citiesInPeriod.add(c);
+    }
+    final considered = selectedCities.isEmpty ? citiesInPeriod : selectedCities.intersection(citiesInPeriod);
+    final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
+    final problems = _problemCount(consideredRecords);
+    final percent = _problemPercent(consideredRecords);
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.7,
+      children: [
+        _statCard(title: 'تعداد شهرها', value: _toPersian('${considered.length}'), icon: Icons.location_on_outlined),
+        _statCard(title: 'تعداد بازرسی‌ها', value: _toPersian('${consideredRecords.length}'), icon: Icons.assignment_outlined),
+        _statCard(title: 'تعداد مشکلات', value: _toPersian('$problems'), icon: Icons.warning_amber_rounded, accentColor: InspectionManagerApp.accentColor),
+        _statCard(title: 'درصد مشکلات', value: '${_toPersian(percent.clamp(0, 100).toStringAsFixed(0))}٪', icon: Icons.percent, accentColor: InspectionManagerApp.accentColor),
+      ],
+    );
+  }
+
+  List<MapEntry<String, int>> _monthlyTrend() {
+    final Map<String, int> counts = {};
+    for (final item in inspections) {
+      final m = _getMonth(item.date);
+      if (m.isEmpty) continue;
+      counts[m] = (counts[m] ?? 0) + 1;
+    }
+    final months = counts.keys.toList()..sort((a, b) => _monthKey(a).compareTo(_monthKey(b)));
+    final last6 = months.length > 6 ? months.sublist(months.length - 6) : months;
+    return last6.map((m) => MapEntry(m, counts[m] ?? 0)).toList();
+  }
+
+  Widget _trendChart() {
+    final trend = _monthlyTrend();
+    return _LineChartCard(
+      title: 'روند بازرسی‌ها در بازه زمانی (۶ ماه اخیر)',
+      labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
+      values: trend.map((e) => e.value.toDouble()).toList(),
+    );
+  }
+
+  Widget _donutChart() {
+    final records = _periodRecords;
+    final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
+    final problems = _problemCount(consideredRecords);
+    final ok = consideredRecords.length - problems;
+    return _DonutChartCard(title: 'درصد مشکلات نسبت به بازرسی', problemCount: problems, okCount: ok);
+  }
+
   Widget _cityComparison() {
     final groups = <String, List<Inspection>>{};
     for (final city in selectedCities) {
@@ -4915,20 +5313,30 @@ class _ReportsPageState extends State<ReportsPage> {
       if (data.isNotEmpty) groups[city] = data;
     }
     if (groups.isEmpty) return const SizedBox.shrink();
+    final labels = groups.keys.toList();
+    final countValues = labels.map((c) => groups[c]!.length.toDouble()).toList();
+    final problemValues = labels.map((c) => _problemCount(groups[c]!).toDouble()).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 20),
-      const Text('مقایسه شهرهای انتخاب‌شده', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 10),
-      _multiChart('تعداد بازرسی', groups, (r) => r.length.toDouble(), 1),
-      _multiChart('تعداد مشکلات', groups, (r) => _problemCount(r).toDouble(), 1),
-      _multiChart('درصد بازرسی‌های دارای مشکل', groups, _problemPercent, 100),
+      const SizedBox(height: 16),
+      _BarChartCard(
+        title: 'مقایسه شهرها (تعداد بازرسی‌ها)',
+        labels: labels,
+        values: countValues,
+        barColor: InspectionManagerApp.primaryColor,
+      ),
+      const SizedBox(height: 12),
+      _BarChartCard(
+        title: 'مقایسه شهرها (تعداد مشکلات)',
+        labels: labels,
+        values: problemValues,
+        barColor: InspectionManagerApp.accentColor,
+      ),
     ]);
   }
 
   Widget _multiChart(String title, Map<String, List<Inspection>> groups, double Function(List<Inspection>) valueOf, double fixedMax) {
     final maxValue = fixedMax == 1 ? groups.values.map(valueOf).fold<double>(1, (a,b) => a>b?a:b) : fixedMax;
     return Card(
-      color: const Color(0xFF101B2E),
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -4938,7 +5346,7 @@ class _ReportsPageState extends State<ReportsPage> {
           final ratio = maxValue <= 0 ? 0.0 : (value/maxValue).clamp(0,1).toDouble();
           final shown = fixedMax == 100 ? '${_toPersian(value.toStringAsFixed(1))}٪' : _toPersian(value.round().toString());
           return Padding(padding: const EdgeInsets.only(bottom: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Expanded(child: Text(e.key)), Text(shown, style: const TextStyle(color: Color(0xFFC9A227), fontWeight: FontWeight.bold))]),
+            Row(children: [Expanded(child: Text(e.key)), Text(shown, style: const TextStyle(color: Color(0xFF19B5A5), fontWeight: FontWeight.bold))]),
             const SizedBox(height: 5),
             LinearProgressIndicator(value: ratio),
           ]));
@@ -4960,10 +5368,10 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _repeatedCard() {
     final groups = _repeatedGroupsForPeriod();
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       margin: const EdgeInsets.only(top: 20),
       child: ListTile(
-        leading: const Icon(Icons.repeat, color: Color(0xFFC9A227), size: 32),
+        leading: const Icon(Icons.repeat, color: Color(0xFF19B5A5), size: 32),
         title: const Text('بازرسی‌های تکراری'),
         subtitle: Text(groups.isEmpty ? 'مورد تکراری در این بازه پیدا نشد.' : '${_toPersian('${groups.length}')} کد عامل تکراری است.'),
         trailing: const Icon(Icons.chevron_right),
@@ -4994,20 +5402,20 @@ class _ReportsPageState extends State<ReportsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
-        const Text('خلاصه گزارش', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
+        const Text('خلاصه گزارش', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 21, fontWeight: FontWeight.bold)),
         _statCard(title: 'کل بازرسی‌ها', value: _toPersian('${records.length}'), icon: Icons.assignment_turned_in),
         Card(
-          color: const Color(0xFF101B2E),
+          color: const Color(0xFF102238),
           child: ListTile(
-            leading: const Icon(Icons.warning_amber_rounded, color: Color(0xFFC9A227)),
+            leading: const Icon(Icons.warning_amber_rounded, color: Color(0xFF19B5A5)),
             title: const Text('بازرسی‌های دارای مشکل'),
             subtitle: const Text('برای مشاهده جزئیات، عامل‌ها و مستندات لمس کنید.'),
-            trailing: Text(_toPersian('$problems'), style: const TextStyle(color: Color(0xFFC9A227), fontSize: 22, fontWeight: FontWeight.bold)),
+            trailing: Text(_toPersian('$problems'), style: const TextStyle(color: Color(0xFF19B5A5), fontSize: 22, fontWeight: FontWeight.bold)),
             onTap: problems == 0 ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProblemInspectionsPage(inspections: records))),
           ),
         ),
         _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('$noProblems'), icon: Icons.check_circle_outline),
-        _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent),
+        _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent, accentColor: InspectionManagerApp.accentColor),
       ],
     );
   }
@@ -5195,13 +5603,13 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _exportButtons() {
     return Card(
-      color: const Color(0xFF101B2E),
+      color: const Color(0xFF102238),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('خروجی برای ارائه به مدیر', style: TextStyle(color: Color(0xFFC9A227), fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('خروجی برای ارائه به مدیر', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -5225,13 +5633,13 @@ class _ReportsPageState extends State<ReportsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 20),
-        const Text('آمار شهرها', style: TextStyle(color: Color(0xFFC9A227), fontSize: 21, fontWeight: FontWeight.bold)),
+        const Text('آمار شهرها', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 21, fontWeight: FontWeight.bold)),
         ...cities.map((city) {
           final data = groups[city]!;
           return Card(
-            color: const Color(0xFF101B2E),
+            color: const Color(0xFF102238),
             child: ListTile(
-              leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
+              leading: const Icon(Icons.location_city, color: Color(0xFF19B5A5)),
               title: Text(city),
               subtitle: Text('بازرسی: ${_toPersian('${data.length}')}  •  مشکل: ${_toPersian('${_problemCount(data)}')}  •  درصد: ${_toPersian(_problemPercent(data).toStringAsFixed(1))}٪'),
             ),
@@ -5254,7 +5662,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 children: [
                   if (inspections.isEmpty)
                     const Card(
-                      color: Color(0xFF101B2E),
+                      color: Color(0xFF102238),
                       child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text('هنوز هیچ بازرسی‌ای ثبت نشده است.', textAlign: TextAlign.center),
@@ -5263,9 +5671,18 @@ class _ReportsPageState extends State<ReportsPage> {
                   else ...[
                     _periodSelector(),
                     _periodDetails(),
-                    _summary(),
+                    const SizedBox(height: 16),
                     _citySelectors(),
+                    const SizedBox(height: 16),
+                    _topStatCards(),
+                    const SizedBox(height: 16),
                     _cityComparison(),
+                    const SizedBox(height: 16),
+                    _trendChart(),
+                    const SizedBox(height: 16),
+                    _donutChart(),
+                    const SizedBox(height: 16),
+                    _summary(),
                     _citySummary(),
                     _repeatedCard(),
                     const SizedBox(height: 8),
@@ -5354,7 +5771,7 @@ class _CitiesReportPageState extends State<CitiesReportPage> {
                                 .length;
                             return Card(
                               child: ListTile(
-                                leading: const Icon(Icons.location_city, color: Color(0xFFC9A227)),
+                                leading: const Icon(Icons.location_city, color: Color(0xFF19B5A5)),
                                 title: Text(entry.key),
                                 subtitle: Text(
                                   'تعداد بازرسی: ${toPersianDigits('${entry.value.length}')}  •  تعداد مشکلات: ${toPersianDigits('$problemCount')}',
@@ -5459,7 +5876,7 @@ class _CityInspectionsPageState extends State<CityInspectionsPage> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: Card(
-              color: const Color(0xFF101B2E),
+              color: const Color(0xFF102238),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Row(children: [
@@ -5574,7 +5991,7 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Card(
-                    color: const Color(0xFF101B2E),
+                    color: const Color(0xFF102238),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Row(children: [
@@ -5854,7 +6271,7 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally { if (mounted) setState(() => _busy = false); }
   }
 
-  Widget _tile({required IconData icon, required String title, required VoidCallback onTap, String? subtitle}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFFC9A227)), title: Text(title), subtitle: subtitle == null ? null : Text(subtitle), trailing: const Icon(Icons.chevron_left), onTap: _busy ? null : onTap));
+  Widget _tile({required IconData icon, required String title, required VoidCallback onTap, String? subtitle}) => Card(child: ListTile(leading: Icon(icon, color: const Color(0xFF19B5A5)), title: Text(title), subtitle: subtitle == null ? null : Text(subtitle), trailing: const Icon(Icons.chevron_left), onTap: _busy ? null : onTap));
 
   @override
   Widget build(BuildContext context) {
@@ -5866,7 +6283,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Row(children: [
             GestureDetector(onTap: _pickProfileImage, child: CircleAvatar(radius: 34, backgroundImage: hasPhoto ? FileImage(File(AppSettings.profileImagePath)) : null, child: hasPhoto ? null : const Icon(Icons.person, size: 38))),
             const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(AppSettings.inspectorName, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)), const SizedBox(height: 4), const Text('ویرایش پروفایل', style: TextStyle(color: Colors.grey))])),
-            IconButton(onPressed: _pickProfileImage, icon: const Icon(Icons.edit, color: Color(0xFFC9A227))),
+            IconButton(onPressed: _pickProfileImage, icon: const Icon(Icons.edit, color: Color(0xFF19B5A5))),
           ]),
         ]))),
         _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
@@ -5875,7 +6292,7 @@ class _SettingsPageState extends State<SettingsPage> {
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          Row(children: [Expanded(child: TextField(controller: _dateController, readOnly: true, decoration: const InputDecoration(labelText: 'تاریخ شمسی', prefixIcon: Icon(Icons.calendar_month)))), const SizedBox(width: 8), IconButton(onPressed: () async { final v = await _pickJalaliDate(initial: _dateController.text); if (v != null) setState(() => _dateController.text = v); }, icon: const Icon(Icons.edit_calendar, color: Color(0xFFC9A227)))]),
+          Row(children: [Expanded(child: TextField(controller: _dateController, readOnly: true, decoration: const InputDecoration(labelText: 'تاریخ شمسی', prefixIcon: Icon(Icons.calendar_month)))), const SizedBox(width: 8), IconButton(onPressed: () async { final v = await _pickJalaliDate(initial: _dateController.text); if (v != null) setState(() => _dateController.text = v); }, icon: const Icon(Icons.edit_calendar, color: Color(0xFF19B5A5)))]),
           const SizedBox(height: 10),
           TextField(controller: _timeController, readOnly: true, decoration: const InputDecoration(labelText: 'ساعت', prefixIcon: Icon(Icons.access_time)), onTap: () async { final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (picked != null) setState(() => _timeController.text = '${picked.hour.toString().padLeft(2,'0')}:${picked.minute.toString().padLeft(2,'0')}'); }),
           const SizedBox(height: 12), ElevatedButton.icon(onPressed: _saveDateTime, icon: const Icon(Icons.save), label: const Text('ذخیره تاریخ و زمان')),
@@ -5921,7 +6338,7 @@ class SimplePage
                 icon,
                 size: 80,
                 color:
-                    const Color(0xFFC9A227),
+                    const Color(0xFF19B5A5),
               ),
               const SizedBox(height: 24),
               Text(
@@ -5931,7 +6348,7 @@ class SimplePage
                 style:
                     const TextStyle(
                   color:
-                      Color(0xFFC9A227),
+                      Color(0xFF19B5A5),
                   fontSize: 24,
                   fontWeight:
                       FontWeight.bold,
