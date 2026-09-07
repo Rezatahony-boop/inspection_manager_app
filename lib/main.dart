@@ -4562,14 +4562,18 @@ class _BarChartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxValue = values.isEmpty ? 1.0 : values.reduce((a, b) => a > b ? a : b);
     final safeMax = maxValue <= 0 ? 1.0 : maxValue;
+    const barWidth = 22.0;
+    const slotWidth = 46.0;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
+            if (title.isNotEmpty) ...[
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 8),
+            ],
             if (values.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
@@ -4577,40 +4581,43 @@ class _BarChartCard extends StatelessWidget {
               )
             else
               SizedBox(
-                height: 90,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(labels.length, (i) {
-                    final ratio = (values[i] / safeMax).clamp(0.0, 1.0);
-                    final label = isPercent ? '${toPersianDigits(values[i].toStringAsFixed(0))}٪' : toPersianDigits(values[i].round().toString());
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                height: 100,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(labels.length, (i) {
+                      final ratio = (values[i] / safeMax).clamp(0.0, 1.0);
+                      final label = isPercent ? '${toPersianDigits(values[i].toStringAsFixed(0))}٪' : toPersianDigits(values[i].round().toString());
+                      return SizedBox(
+                        width: slotWidth,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             Text(label, style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 10)),
                             const SizedBox(height: 3),
-                            Expanded(
+                            SizedBox(
+                              height: 55,
                               child: FractionallySizedBox(
-
                                 heightFactor: ratio == 0 ? 0.02 : ratio,
                                 alignment: Alignment.bottomCenter,
                                 child: Container(
+                                  width: barWidth,
                                   decoration: BoxDecoration(
                                     color: barColor,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
                                   ),
                                 ),
                               ),
                             ),
                             const SizedBox(height: 3),
-                            Text(labels[i], style: const TextStyle(fontSize: 9, color: InspectionManagerApp.textSecondary), overflow: TextOverflow.ellipsis),
+                            Text(labels[i], style: const TextStyle(fontSize: 9, color: InspectionManagerApp.textSecondary), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
                           ],
                         ),
-                      ),
-                    );
-                  }),
+                      );
+                    }),
+                  ),
                 ),
               ),
           ],
@@ -5140,26 +5147,32 @@ class _ReportsPageState extends State<ReportsPage> {
     required String value,
     required IconData icon,
     Color? accentColor,
+    VoidCallback? onTap,
   }) {
     final color = accentColor ?? InspectionManagerApp.primaryColor;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: InspectionManagerApp.bgColor),
               ),
-              child: Icon(icon, color: InspectionManagerApp.bgColor),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-            Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
-          ],
+              const SizedBox(width: 12),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+              Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
+              if (onTap != null) const Icon(Icons.chevron_left, color: InspectionManagerApp.textSecondary),
+            ],
+          ),
         ),
       ),
     );
@@ -5320,51 +5333,36 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _trendChart() {
     final trend = _monthlyTrend();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text('روند بازرسی‌ها در بازه زمانی', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-                DropdownButton<int>(
-                  value: trendMonths,
-                  underline: const SizedBox.shrink(),
-                  dropdownColor: InspectionManagerApp.cardColor,
-                  style: const TextStyle(color: InspectionManagerApp.primaryColor, fontSize: 12, fontWeight: FontWeight.bold),
-                  items: List.generate(12, (i) => i + 1)
-                      .map((m) => DropdownMenuItem(value: m, child: Text('${toPersianDigits('$m')} ماه')))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setState(() => trendMonths = v);
-                  },
-                ),
-              ],
+            const Expanded(
+              child: Text('روند بازرسی‌ها در بازه زمانی', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ),
-            const SizedBox(height: 6),
-            if (trend.isEmpty || trend.every((e) => e.value == 0))
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 30),
-                child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
-              )
-            else
-              SizedBox(
-                height: 170,
-                child: CustomPaint(
-                  size: const Size(double.infinity, 170),
-                  painter: _LineChartPainter(
-                    values: trend.map((e) => e.value.toDouble()).toList(),
-                    labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
-                  ),
-                ),
-              ),
+            DropdownButton<int>(
+              value: trendMonths,
+              underline: const SizedBox.shrink(),
+              dropdownColor: InspectionManagerApp.cardColor,
+              style: const TextStyle(color: InspectionManagerApp.primaryColor, fontSize: 12, fontWeight: FontWeight.bold),
+              items: List.generate(12, (i) => i + 1)
+                  .map((m) => DropdownMenuItem(value: m, child: Text('${toPersianDigits('$m')} ماه')))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => trendMonths = v);
+              },
+            ),
           ],
         ),
-      ),
+        const SizedBox(height: 8),
+        _BarChartCard(
+          title: '',
+          labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
+          values: trend.map((e) => e.value.toDouble()).toList(),
+          barColor: InspectionManagerApp.primaryColor,
+        ),
+      ],
     );
   }
 
@@ -5388,27 +5386,18 @@ class _ReportsPageState extends State<ReportsPage> {
     final problemValues = labels.map((c) => _problemCount(groups[c]!).toDouble()).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 16),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _BarChartCard(
-              title: 'مقایسه شهرها (بازرسی‌ها)',
-              labels: labels,
-              values: countValues,
-              barColor: InspectionManagerApp.primaryColor,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _BarChartCard(
-              title: 'مقایسه شهرها (مشکلات)',
-              labels: labels,
-              values: problemValues,
-              barColor: InspectionManagerApp.accentColor,
-            ),
-          ),
-        ],
+      _BarChartCard(
+        title: 'مقایسه شهرها (تعداد بازرسی‌ها)',
+        labels: labels,
+        values: countValues,
+        barColor: InspectionManagerApp.primaryColor,
+      ),
+      const SizedBox(height: 12),
+      _BarChartCard(
+        title: 'مقایسه شهرها (تعداد مشکلات)',
+        labels: labels,
+        values: problemValues,
+        barColor: InspectionManagerApp.accentColor,
       ),
     ]);
   }
@@ -5482,7 +5471,12 @@ class _ReportsPageState extends State<ReportsPage> {
       children: [
         const SizedBox(height: 20),
         const Text('خلاصه گزارش', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 21, fontWeight: FontWeight.bold)),
-        _statCard(title: 'کل بازرسی‌ها', value: _toPersian('${records.length}'), icon: Icons.assignment_turned_in),
+        _statCard(
+          title: 'کل بازرسی‌ها',
+          value: _toPersian('${records.length}'),
+          icon: Icons.assignment_turned_in,
+          onTap: records.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => CityInspectionsPage(city: 'کل بازرسی‌های انجام‌شده', inspections: records))),
+        ),
         Card(
           color: const Color(0xFF102238),
           child: ListTile(
@@ -5493,7 +5487,12 @@ class _ReportsPageState extends State<ReportsPage> {
             onTap: problems == 0 ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProblemInspectionsPage(inspections: records))),
           ),
         ),
-        _statCard(title: 'بازرسی‌های بدون مشکل', value: _toPersian('$noProblems'), icon: Icons.check_circle_outline),
+        _statCard(
+          title: 'بازرسی‌های بدون مشکل',
+          value: _toPersian('$noProblems'),
+          icon: Icons.check_circle_outline,
+          onTap: noProblems == 0 ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => CityInspectionsPage(city: 'بازرسی‌های بدون مشکل', inspections: records.where((e) => e.problems.trim().isEmpty).toList()))),
+        ),
         _statCard(title: 'درصد بازرسی‌های دارای مشکل', value: '${_toPersian(_problemPercent(records).clamp(0, 100).toStringAsFixed(1))}٪', icon: Icons.percent, accentColor: InspectionManagerApp.accentColor),
       ],
     );
