@@ -4605,7 +4605,11 @@ class _BarChartCard extends StatelessWidget {
                                 child: Container(
                                   width: barWidth,
                                   decoration: BoxDecoration(
-                                    color: barColor,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [barColor, barColor.withValues(alpha: 0.45)],
+                                    ),
                                     borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
                                   ),
                                 ),
@@ -4685,7 +4689,14 @@ class _LineChartPainter extends CustomPainter {
       ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke;
     final fillPaint = Paint()
-      ..color = InspectionManagerApp.primaryColor.withValues(alpha: 0.15)
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          InspectionManagerApp.primaryColor.withValues(alpha: 0.35),
+          InspectionManagerApp.primaryColor.withValues(alpha: 0.02),
+        ],
+      ).createShader(Rect.fromLTWH(0, topPad, size.width, chartHeight))
       ..style = PaintingStyle.fill;
     final dotPaint = Paint()..color = InspectionManagerApp.primaryColor;
     final gridPaint = Paint()
@@ -5356,11 +5367,26 @@ class _ReportsPageState extends State<ReportsPage> {
           ],
         ),
         const SizedBox(height: 8),
-        _BarChartCard(
-          title: '',
-          labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
-          values: trend.map((e) => e.value.toDouble()).toList(),
-          barColor: InspectionManagerApp.primaryColor,
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: trend.isEmpty || trend.every((e) => e.value == 0)
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 30),
+                    child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
+                  )
+                : SizedBox(
+                    height: 190,
+                    width: double.infinity,
+                    child: CustomPaint(
+                      size: const Size(double.infinity, 190),
+                      painter: _LineChartPainter(
+                        values: trend.map((e) => e.value.toDouble()).toList(),
+                        labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
+                      ),
+                    ),
+                  ),
+          ),
         ),
       ],
     );
