@@ -821,50 +821,77 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.verified_user,
-                size: 82,
-                color: Color(0xFF19B5A5),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'سامانه مدیریت بازرسی',
-                style: TextStyle(
-                  color: Color(0xFF19B5A5),
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 34, height: 1, color: InspectionManagerApp.primaryColor),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(
+                        'سامانه نظارت و بازرسی',
+                        style: TextStyle(
+                          color: InspectionManagerApp.primaryColor,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(width: 34, height: 1, color: InspectionManagerApp.primaryColor),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 30),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                onSubmitted: (_) => login(),
-                decoration: const InputDecoration(
-                  labelText: 'رمز ورود',
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: login,
-                  child: const Text(
-                    'ورود به برنامه',
-                    style: TextStyle(fontSize: 17),
+                const SizedBox(height: 24),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/flag.png',
+                    width: 260,
+                    fit: BoxFit.contain,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 28),
+                TextField(
+                  controller: passwordController,
+                  obscureText: true,
+                  onSubmitted: (_) => login(),
+                  decoration: const InputDecoration(
+                    labelText: 'رمز عبور',
+                    prefixIcon: Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: login,
+                    child: const Text(
+                      'ورود',
+                      style: TextStyle(fontSize: 17),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(width: 24, height: 1, color: InspectionManagerApp.borderColor),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text('نسخه ۱.۰.۰', style: TextStyle(color: InspectionManagerApp.textSecondary, fontSize: 12)),
+                    ),
+                    Container(width: 24, height: 1, color: InspectionManagerApp.borderColor),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -4537,20 +4564,20 @@ class _BarChartCard extends StatelessWidget {
     final safeMax = maxValue <= 0 ? 1.0 : maxValue;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 14),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 8),
             if (values.isEmpty)
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: Text('داده‌ای نیست.', style: TextStyle(color: InspectionManagerApp.textSecondary, fontSize: 11))),
               )
             else
               SizedBox(
-                height: 160,
+                height: 90,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: List.generate(labels.length, (i) {
@@ -4558,14 +4585,15 @@ class _BarChartCard extends StatelessWidget {
                     final label = isPercent ? '${toPersianDigits(values[i].toStringAsFixed(0))}٪' : toPersianDigits(values[i].round().toString());
                     return Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Text(label, style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(height: 4),
+                            Text(label, style: TextStyle(color: barColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                            const SizedBox(height: 3),
                             Expanded(
                               child: FractionallySizedBox(
+
                                 heightFactor: ratio == 0 ? 0.02 : ratio,
                                 alignment: Alignment.bottomCenter,
                                 child: Container(
@@ -4576,8 +4604,8 @@ class _BarChartCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(labels[i], style: const TextStyle(fontSize: 11, color: InspectionManagerApp.textSecondary), overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 3),
+                            Text(labels[i], style: const TextStyle(fontSize: 9, color: InspectionManagerApp.textSecondary), overflow: TextOverflow.ellipsis),
                           ],
                         ),
                       ),
@@ -4840,6 +4868,7 @@ class _ReportsPageState extends State<ReportsPage> {
   String endDate = '';
   final Set<String> selectedCities = <String>{};
   bool exporting = false;
+  int trendMonths = 6;
 
   @override
   void initState() {
@@ -5285,16 +5314,57 @@ class _ReportsPageState extends State<ReportsPage> {
       counts[m] = (counts[m] ?? 0) + 1;
     }
     final months = counts.keys.toList()..sort((a, b) => _monthKey(a).compareTo(_monthKey(b)));
-    final last6 = months.length > 6 ? months.sublist(months.length - 6) : months;
-    return last6.map((m) => MapEntry(m, counts[m] ?? 0)).toList();
+    final last = months.length > trendMonths ? months.sublist(months.length - trendMonths) : months;
+    return last.map((m) => MapEntry(m, counts[m] ?? 0)).toList();
   }
 
   Widget _trendChart() {
     final trend = _monthlyTrend();
-    return _LineChartCard(
-      title: 'روند بازرسی‌ها در بازه زمانی (۶ ماه اخیر)',
-      labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
-      values: trend.map((e) => e.value.toDouble()).toList(),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('روند بازرسی‌ها در بازه زمانی', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+                DropdownButton<int>(
+                  value: trendMonths,
+                  underline: const SizedBox.shrink(),
+                  dropdownColor: InspectionManagerApp.cardColor,
+                  style: const TextStyle(color: InspectionManagerApp.primaryColor, fontSize: 12, fontWeight: FontWeight.bold),
+                  items: List.generate(12, (i) => i + 1)
+                      .map((m) => DropdownMenuItem(value: m, child: Text('${toPersianDigits('$m')} ماه')))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => trendMonths = v);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (trend.isEmpty || trend.every((e) => e.value == 0))
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 30),
+                child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
+              )
+            else
+              SizedBox(
+                height: 170,
+                child: CustomPaint(
+                  size: const Size(double.infinity, 170),
+                  painter: _LineChartPainter(
+                    values: trend.map((e) => e.value.toDouble()).toList(),
+                    labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -5318,18 +5388,27 @@ class _ReportsPageState extends State<ReportsPage> {
     final problemValues = labels.map((c) => _problemCount(groups[c]!).toDouble()).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 16),
-      _BarChartCard(
-        title: 'مقایسه شهرها (تعداد بازرسی‌ها)',
-        labels: labels,
-        values: countValues,
-        barColor: InspectionManagerApp.primaryColor,
-      ),
-      const SizedBox(height: 12),
-      _BarChartCard(
-        title: 'مقایسه شهرها (تعداد مشکلات)',
-        labels: labels,
-        values: problemValues,
-        barColor: InspectionManagerApp.accentColor,
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _BarChartCard(
+              title: 'مقایسه شهرها (بازرسی‌ها)',
+              labels: labels,
+              values: countValues,
+              barColor: InspectionManagerApp.primaryColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _BarChartCard(
+              title: 'مقایسه شهرها (مشکلات)',
+              labels: labels,
+              values: problemValues,
+              barColor: InspectionManagerApp.accentColor,
+            ),
+          ),
+        ],
       ),
     ]);
   }
