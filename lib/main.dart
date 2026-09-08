@@ -6496,6 +6496,19 @@ class SimplePage
 // کلید ذخیره‌سازی جداگانه (pakhsh_records) کار می‌کند.
 // =====================================================================
 
+String _pakhshEnDigits(String value) => value.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
+      const persian = '۰۱۲۳۴۵۶۷۸۹';
+      const arabic = '٠١٢٣٤٥٦٧٨٩';
+      final ch = m.group(0)!;
+      final pIndex = persian.indexOf(ch);
+      if (pIndex != -1) return pIndex.toString();
+      final aIndex = arabic.indexOf(ch);
+      if (aIndex != -1) return aIndex.toString();
+      return ch;
+    });
+
+String _pakhshTodayAscii() => _pakhshEnDigits(AppSettings.todayJalali());
+
 class PakhshRecord {
   final String id;
   final String distributorName;
@@ -6677,7 +6690,7 @@ class _NewPakhshRecordPageState extends State<NewPakhshRecordPage> {
   @override
   void initState() {
     super.initState();
-    dateController = TextEditingController(text: AppSettings.todayJalali());
+    dateController = TextEditingController(text: _pakhshTodayAscii());
   }
 
   @override
@@ -6696,7 +6709,7 @@ class _NewPakhshRecordPageState extends State<NewPakhshRecordPage> {
   }
 
   Future<String?> _pickJalaliDate() async {
-    final parts = dateController.text.split('/');
+    final parts = _pakhshEnDigits(dateController.text).split('/');
     int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 1403;
     int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
     int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
@@ -6858,21 +6871,18 @@ class _NewPakhshRecordPageState extends State<NewPakhshRecordPage> {
   }
 
   Future<void> save() async {
-    if (nameController.text.trim().isEmpty || codeController.text.trim().isEmpty) {
-      _showMessage('لطفاً نام و کد موزع را وارد کنید.');
-      return;
-    }
     if (saving) return;
     setState(() => saving = true);
     try {
+      final reportText = reportController.text.trim();
       final record = PakhshRecord(
         id: 'pakhsh_${DateTime.now().millisecondsSinceEpoch}',
         distributorName: nameController.text.trim(),
         distributorCode: codeController.text.trim(),
-        date: dateController.text.trim(),
+        date: _pakhshEnDigits(dateController.text.trim()),
         cityRoute: cityController.text.trim(),
-        reportText: reportController.text.trim(),
-        violationType: '',
+        reportText: reportText,
+        violationType: reportText.isNotEmpty ? 'تخلف ثبت‌شده' : '',
         evidences: evidences,
       );
       await PakhshStorage.add(record);
@@ -7003,8 +7013,8 @@ class _PakhshArchivePageState extends State<PakhshArchivePage> {
   final TextEditingController nameFilter = TextEditingController();
   final TextEditingController codeFilter = TextEditingController();
   final TextEditingController cityFilter = TextEditingController();
-  String fromDate = '';
-  String toDate = '';
+  String fromDate = _pakhshTodayAscii();
+  String toDate = _pakhshTodayAscii();
   String violationFilter = 'همه';
 
   @override
@@ -7036,8 +7046,9 @@ class _PakhshArchivePageState extends State<PakhshArchivePage> {
       if (nameFilter.text.trim().isNotEmpty && !r.distributorName.contains(nameFilter.text.trim())) return false;
       if (codeFilter.text.trim().isNotEmpty && !r.distributorCode.contains(codeFilter.text.trim())) return false;
       if (cityFilter.text.trim().isNotEmpty && !r.cityRoute.contains(cityFilter.text.trim())) return false;
-      if (fromDate.isNotEmpty && r.date.compareTo(fromDate) < 0) return false;
-      if (toDate.isNotEmpty && r.date.compareTo(toDate) > 0) return false;
+      final recordDate = _pakhshEnDigits(r.date);
+      if (fromDate.isNotEmpty && recordDate.compareTo(_pakhshEnDigits(fromDate)) < 0) return false;
+      if (toDate.isNotEmpty && recordDate.compareTo(_pakhshEnDigits(toDate)) > 0) return false;
       if (violationFilter == 'بدون تخلف' && r.hasViolation) return false;
       if (violationFilter != 'همه' && violationFilter != 'بدون تخلف' && r.violationType.trim() != violationFilter) return false;
       return true;
@@ -7046,9 +7057,9 @@ class _PakhshArchivePageState extends State<PakhshArchivePage> {
   }
 
   Future<void> _pickDate({required bool isFrom}) async {
-    final current = isFrom ? fromDate : toDate;
+    final current = _pakhshEnDigits(isFrom ? fromDate : toDate);
     final parts = current.split('/');
-    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 1403;
+    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? int.parse(_pakhshTodayAscii().split('/')[0]);
     int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
     int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
 
@@ -7512,8 +7523,9 @@ class _PakhshReportsPageState extends State<PakhshReportsPage> {
   List<PakhshRecord> get _periodRecords {
     if (fromDate.isEmpty && toDate.isEmpty) return all;
     return all.where((r) {
-      if (fromDate.isNotEmpty && r.date.compareTo(fromDate) < 0) return false;
-      if (toDate.isNotEmpty && r.date.compareTo(toDate) > 0) return false;
+      final recordDate = _pakhshEnDigits(r.date);
+      if (fromDate.isNotEmpty && recordDate.compareTo(_pakhshEnDigits(fromDate)) < 0) return false;
+      if (toDate.isNotEmpty && recordDate.compareTo(_pakhshEnDigits(toDate)) > 0) return false;
       return true;
     }).toList();
   }
@@ -7530,9 +7542,9 @@ class _PakhshReportsPageState extends State<PakhshReportsPage> {
   }
 
   Future<void> _pickDate({required bool isFrom}) async {
-    final current = isFrom ? fromDate : toDate;
+    final current = _pakhshEnDigits(isFrom ? fromDate : toDate);
     final parts = current.split('/');
-    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? int.parse(AppSettings.todayJalali().split('/')[0]);
+    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? int.parse(_pakhshTodayAscii().split('/')[0]);
     int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
     int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
 
@@ -7716,8 +7728,20 @@ class _PakhshReportsPageState extends State<PakhshReportsPage> {
                   mainAxisSpacing: 10,
                   childAspectRatio: 1.7,
                   children: [
-                    _statCardPakhsh('تعداد نظارت‌ها', toPersianDigits('${records.length}'), Icons.playlist_add_check, InspectionManagerApp.primaryColor),
-                    _statCardPakhsh('تعداد تخلفات', toPersianDigits('${violations.length}'), Icons.warning_amber_rounded, InspectionManagerApp.accentColor),
+                    _statCardPakhsh(
+                      'تعداد نظارت‌ها',
+                      toPersianDigits('${records.length}'),
+                      Icons.playlist_add_check,
+                      InspectionManagerApp.primaryColor,
+                      onTap: records.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => PakhshRecordListPage(title: 'تمام نظارت‌ها', records: records))),
+                    ),
+                    _statCardPakhsh(
+                      'تعداد تخلفات',
+                      toPersianDigits('${violations.length}'),
+                      Icons.warning_amber_rounded,
+                      InspectionManagerApp.accentColor,
+                      onTap: violations.isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => PakhshRecordListPage(title: 'نظارت‌های دارای تخلف', records: violations))),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -7778,24 +7802,64 @@ class _PakhshReportsPageState extends State<PakhshReportsPage> {
     );
   }
 
-  Widget _statCardPakhsh(String title, String value, IconData icon, Color color) {
+  Widget _statCardPakhsh(String title, String value, IconData icon, Color color, {VoidCallback? onTap}) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: InspectionManagerApp.bgColor),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-            Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
-          ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, color: InspectionManagerApp.bgColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+              Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+              if (onTap != null) const Icon(Icons.chevron_left, size: 18, color: InspectionManagerApp.textSecondary),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// لیست ساده نظارت‌ها (برای کلیک روی کارت‌های آماری گزارش‌های پخش)
+// ---------------------------------------------------------------------
+
+class PakhshRecordListPage extends StatelessWidget {
+  final String title;
+  final List<PakhshRecord> records;
+  const PakhshRecordListPage({super.key, required this.title, required this.records});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: records.isEmpty
+          ? const Center(child: Text('موردی یافت نشد.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: records.length,
+              itemBuilder: (context, index) {
+                final r = records[index];
+                return Card(
+                  child: ListTile(
+                    leading: Icon(r.hasViolation ? Icons.warning_amber : Icons.check_circle, color: r.hasViolation ? InspectionManagerApp.problemMaroon : InspectionManagerApp.okGreen),
+                    title: Text('${r.distributorName} (${r.distributorCode})'),
+                    subtitle: Text('${toPersianDigits(r.date)} • ${r.cityRoute}'),
+                    trailing: const Icon(Icons.chevron_left),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PakhshRecordDetailsPage(record: r))),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
