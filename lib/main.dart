@@ -1088,6 +1088,18 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                   },
                 ),
                 DashboardButton(
+                  title: 'نظارت پخش',
+                  icon: Icons.local_shipping,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PakhshDashboardPage(),
+                      ),
+                    );
+                  },
+                ),
+                DashboardButton(
                   title: 'تنظیمات',
                   icon: Icons.settings,
                   onTap: () async {
@@ -6472,6 +6484,1316 @@ class SimplePage
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// ماژول کاملاً مستقل «نظارت پخش» — جدا از بایگانی و دیتای بازرسی فروشگاه‌ها
+// این بخش هیچ ارتباطی با Inspection / AppStorage قبلی ندارد و با
+// کلید ذخیره‌سازی جداگانه (pakhsh_records) کار می‌کند.
+// =====================================================================
+
+class PakhshRecord {
+  final String id;
+  final String distributorName;
+  final String distributorCode;
+  final String date; // شمسی
+  final String cityRoute;
+  final String reportText;
+  final String violationType; // خالی یعنی هنوز تخلفی ثبت/تشخیص داده نشده
+  final List<EvidenceFile> evidences;
+
+  PakhshRecord({
+    required this.id,
+    required this.distributorName,
+    required this.distributorCode,
+    required this.date,
+    required this.cityRoute,
+    required this.reportText,
+    required this.violationType,
+    required this.evidences,
+  });
+
+  bool get hasViolation => violationType.trim().isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'distributorName': distributorName,
+        'distributorCode': distributorCode,
+        'date': date,
+        'cityRoute': cityRoute,
+        'reportText': reportText,
+        'violationType': violationType,
+        'evidences': evidences.map((e) => e.toJson()).toList(),
+      };
+
+  factory PakhshRecord.fromJson(Map<String, dynamic> json) {
+    final evidenceData = json['evidences'];
+    List<EvidenceFile> evidenceList = [];
+    if (evidenceData is List) {
+      evidenceList = evidenceData.map((item) => EvidenceFile.fromJson(Map<String, dynamic>.from(item))).toList();
+    }
+    return PakhshRecord(
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      distributorName: json['distributorName']?.toString() ?? '',
+      distributorCode: json['distributorCode']?.toString() ?? '',
+      date: json['date']?.toString() ?? '',
+      cityRoute: json['cityRoute']?.toString() ?? '',
+      reportText: json['reportText']?.toString() ?? '',
+      violationType: json['violationType']?.toString() ?? '',
+      evidences: evidenceList,
+    );
+  }
+
+  PakhshRecord copyWith({
+    String? distributorName,
+    String? distributorCode,
+    String? date,
+    String? cityRoute,
+    String? reportText,
+    String? violationType,
+    List<EvidenceFile>? evidences,
+  }) {
+    return PakhshRecord(
+      id: id,
+      distributorName: distributorName ?? this.distributorName,
+      distributorCode: distributorCode ?? this.distributorCode,
+      date: date ?? this.date,
+      cityRoute: cityRoute ?? this.cityRoute,
+      reportText: reportText ?? this.reportText,
+      violationType: violationType ?? this.violationType,
+      evidences: evidences ?? this.evidences,
+    );
+  }
+}
+
+class PakhshStorage {
+  static const String _key = 'pakhsh_records';
+
+  static Future<List<PakhshRecord>> getAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data == null || data.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(data);
+      return decoded.map((item) => PakhshRecord.fromJson(Map<String, dynamic>.from(item))).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _saveAll(List<PakhshRecord> records) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(records.map((e) => e.toJson()).toList()));
+  }
+
+  static Future<void> add(PakhshRecord record) async {
+    final all = await getAll();
+    all.add(record);
+    await _saveAll(all);
+  }
+
+  static Future<void> update(PakhshRecord record) async {
+    final all = await getAll();
+    final index = all.indexWhere((e) => e.id == record.id);
+    if (index != -1) {
+      all[index] = record;
+      await _saveAll(all);
+    }
+  }
+
+  static Future<void> delete(String id) async {
+    final all = await getAll();
+    all.removeWhere((e) => e.id == id);
+    await _saveAll(all);
+  }
+}
+
+// ---------------------------------------------------------------------
+// داشبورد نظارت پخش
+// ---------------------------------------------------------------------
+
+class PakhshDashboardPage extends StatelessWidget {
+  const PakhshDashboardPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('نظارت پخش')),
+      body: GridView.count(
+        padding: const EdgeInsets.all(16),
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        children: [
+          DashboardButton(
+            title: 'ثبت نظارت جدید',
+            icon: Icons.playlist_add,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NewPakhshRecordPage())),
+          ),
+          DashboardButton(
+            title: 'بایگانی نظارت‌ها',
+            icon: Icons.folder_special,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PakhshArchivePage())),
+          ),
+          DashboardButton(
+            title: 'گزارش‌های پخش',
+            icon: Icons.local_shipping,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PakhshReportsPage())),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// ثبت نظارت جدید
+// ---------------------------------------------------------------------
+
+class NewPakhshRecordPage extends StatefulWidget {
+  const NewPakhshRecordPage({super.key});
+
+  @override
+  State<NewPakhshRecordPage> createState() => _NewPakhshRecordPageState();
+}
+
+class _NewPakhshRecordPageState extends State<NewPakhshRecordPage> {
+  late final TextEditingController dateController;
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController codeController = TextEditingController();
+  final TextEditingController cityController = TextEditingController();
+  final TextEditingController reportController = TextEditingController();
+
+  final ImagePicker imagePicker = ImagePicker();
+  final AudioRecorder audioRecorder = AudioRecorder();
+  final List<EvidenceFile> evidences = [];
+  bool recording = false;
+  bool saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    dateController = TextEditingController(text: AppSettings.todayJalali());
+  }
+
+  @override
+  void dispose() {
+    dateController.dispose();
+    nameController.dispose();
+    codeController.dispose();
+    cityController.dispose();
+    reportController.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<String?> _pickJalaliDate() async {
+    final parts = dateController.text.split('/');
+    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 1403;
+    int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
+    int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
+    final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+    day = day.clamp(1, maxDay).toInt();
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final maxDayInner = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+            return AlertDialog(
+              title: const Text('انتخاب تاریخ شمسی'),
+              content: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: day,
+                      decoration: const InputDecoration(labelText: 'روز'),
+                      items: List.generate(maxDayInner, (i) => i + 1).map((d) => DropdownMenuItem(value: d, child: Text(toPersianDigits('$d')))).toList(),
+                      onChanged: (v) => setStateDialog(() => day = v ?? day),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: month,
+                      decoration: const InputDecoration(labelText: 'ماه'),
+                      items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text(toPersianDigits('$m')))).toList(),
+                      onChanged: (v) => setStateDialog(() {
+                        month = v ?? month;
+                        final newMax = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+                        if (day > newMax) day = newMax;
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: year,
+                      decoration: const InputDecoration(labelText: 'سال'),
+                      items: List.generate(30, (i) => 1390 + i).map((y) => DropdownMenuItem(value: y, child: Text(toPersianDigits('$y')))).toList(),
+                      onChanged: (v) => setStateDialog(() => year = v ?? year),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, '$year/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}'),
+                  child: const Text('ذخیره'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> pickGalleryImages() async {
+    try {
+      final images = await imagePicker.pickMultiImage(imageQuality: 90);
+      if (images.isEmpty) return;
+      final directory = await getEvidenceDirectory();
+      for (final image in images) {
+        final extension = image.path.split('.').last;
+        final fileName = 'pakhsh_photo_${DateTime.now().millisecondsSinceEpoch}_${evidences.length}.$extension';
+        final destination = File('${directory.path}/$fileName');
+        await File(image.path).copy(destination.path);
+        evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      _showMessage('خطا در انتخاب عکس');
+    }
+  }
+
+  Future<void> takePhoto() async {
+    try {
+      final image = await imagePicker.pickImage(source: ImageSource.camera, imageQuality: 90);
+      if (image == null) return;
+      final directory = await getEvidenceDirectory();
+      final extension = image.path.split('.').last;
+      final fileName = 'pakhsh_camera_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final destination = File('${directory.path}/$fileName');
+      await File(image.path).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      if (mounted) setState(() {});
+    } catch (_) {
+      _showMessage('خطا در گرفتن عکس');
+    }
+  }
+
+  Future<void> pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.first;
+      if (picked.path == null) {
+        _showMessage('فایل قابل دسترسی نیست');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${picked.name}';
+      final destination = File('${directory.path}/$fileName');
+      await File(picked.path!).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'file', name: picked.name));
+      if (mounted) setState(() {});
+    } catch (_) {
+      _showMessage('خطا در انتخاب فایل');
+    }
+  }
+
+  Future<void> startRecording() async {
+    try {
+      final hasPermission = await audioRecorder.hasPermission();
+      if (!hasPermission) {
+        _showMessage('اجازه استفاده از میکروفون داده نشد');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final path = '${directory.path}/pakhsh_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() => recording = true);
+    } catch (_) {
+      _showMessage('خطا در شروع ضبط صدا');
+    }
+  }
+
+  Future<void> stopRecording() async {
+    try {
+      final path = await audioRecorder.stop();
+      if (mounted) setState(() => recording = false);
+      if (path != null && path.isNotEmpty) {
+        evidences.add(EvidenceFile(path: path, type: 'audio', name: 'فایل صوتی'));
+        if (mounted) setState(() {});
+      }
+    } catch (_) {
+      if (mounted) setState(() => recording = false);
+      _showMessage('خطا در ذخیره فایل صوتی');
+    }
+  }
+
+  Future<void> removeEvidence(int index) async {
+    final evidence = evidences[index];
+    try {
+      final file = File(evidence.path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    setState(() => evidences.removeAt(index));
+  }
+
+  Future<void> save() async {
+    if (nameController.text.trim().isEmpty || codeController.text.trim().isEmpty) {
+      _showMessage('لطفاً نام و کد موزع را وارد کنید.');
+      return;
+    }
+    if (saving) return;
+    setState(() => saving = true);
+    try {
+      final record = PakhshRecord(
+        id: 'pakhsh_${DateTime.now().millisecondsSinceEpoch}',
+        distributorName: nameController.text.trim(),
+        distributorCode: codeController.text.trim(),
+        date: dateController.text.trim(),
+        cityRoute: cityController.text.trim(),
+        reportText: reportController.text.trim(),
+        violationType: '',
+        evidences: evidences,
+      );
+      await PakhshStorage.add(record);
+      if (mounted) {
+        _showMessage('نظارت با موفقیت ثبت شد.');
+        Navigator.pop(context);
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon), border: const OutlineInputBorder()),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('ثبت نظارت جدید')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _field('نام موزع / راننده', nameController, Icons.person_outline),
+          _field('کد موزع', codeController, Icons.badge_outlined),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: dateController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'تاریخ (شمسی)',
+                prefixIcon: const Icon(Icons.calendar_month),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.edit_calendar),
+                  onPressed: () async {
+                    final v = await _pickJalaliDate();
+                    if (v != null) setState(() => dateController.text = v);
+                  },
+                ),
+              ),
+            ),
+          ),
+          _field('شهرستان / مسیر', cityController, Icons.alt_route),
+          _field('شرح گزارش', reportController, Icons.description_outlined, maxLines: 6),
+          const Divider(height: 28),
+          const Text('مستندات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(onPressed: pickGalleryImages, icon: const Icon(Icons.photo_library), label: const Text('گالری')),
+              ElevatedButton.icon(onPressed: takePhoto, icon: const Icon(Icons.camera_alt), label: const Text('دوربین')),
+              ElevatedButton.icon(onPressed: pickFile, icon: const Icon(Icons.attach_file), label: const Text('فایل')),
+              ElevatedButton.icon(
+                onPressed: recording ? stopRecording : startRecording,
+                icon: Icon(recording ? Icons.stop_circle : Icons.mic),
+                label: Text(recording ? 'توقف ضبط' : 'ضبط صدا'),
+                style: recording ? ElevatedButton.styleFrom(backgroundColor: Colors.redAccent) : null,
+              ),
+            ],
+          ),
+          if (recording) ...[
+            const SizedBox(height: 10),
+            const Row(children: [
+              Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 14),
+              SizedBox(width: 8),
+              Text('در حال ضبط صدا...', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            ]),
+          ],
+          const SizedBox(height: 12),
+          if (evidences.isEmpty)
+            const Text('هنوز مستندی اضافه نشده است.', style: TextStyle(color: InspectionManagerApp.textSecondary))
+          else
+            ...List.generate(evidences.length, (index) {
+              final evidence = evidences[index];
+              IconData icon = Icons.insert_drive_file;
+              if (evidence.type == 'image') icon = Icons.image;
+              if (evidence.type == 'audio') icon = Icons.audiotrack;
+              return Card(
+                child: ListTile(
+                  leading: Icon(icon, color: InspectionManagerApp.primaryColor),
+                  title: Text(evidence.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () => removeEvidence(index)),
+                ),
+              );
+            }),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              onPressed: saving ? null : save,
+              icon: const Icon(Icons.save),
+              label: Text(saving ? 'در حال ذخیره...' : 'ذخیره نظارت'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// بایگانی نظارت‌ها
+// ---------------------------------------------------------------------
+
+class PakhshArchivePage extends StatefulWidget {
+  const PakhshArchivePage({super.key});
+
+  @override
+  State<PakhshArchivePage> createState() => _PakhshArchivePageState();
+}
+
+class _PakhshArchivePageState extends State<PakhshArchivePage> {
+  List<PakhshRecord> all = [];
+  bool loading = true;
+  bool exporting = false;
+
+  final TextEditingController nameFilter = TextEditingController();
+  final TextEditingController codeFilter = TextEditingController();
+  final TextEditingController cityFilter = TextEditingController();
+  String fromDate = '';
+  String toDate = '';
+  String violationFilter = 'همه';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await PakhshStorage.getAll();
+    if (!mounted) return;
+    setState(() {
+      all = data;
+      loading = false;
+    });
+  }
+
+  List<String> get _violationOptions {
+    final set = <String>{};
+    for (final r in all) {
+      if (r.violationType.trim().isNotEmpty) set.add(r.violationType.trim());
+    }
+    final list = set.toList()..sort();
+    return ['همه', 'بدون تخلف', ...list];
+  }
+
+  List<PakhshRecord> get _filtered {
+    return all.where((r) {
+      if (nameFilter.text.trim().isNotEmpty && !r.distributorName.contains(nameFilter.text.trim())) return false;
+      if (codeFilter.text.trim().isNotEmpty && !r.distributorCode.contains(codeFilter.text.trim())) return false;
+      if (cityFilter.text.trim().isNotEmpty && !r.cityRoute.contains(cityFilter.text.trim())) return false;
+      if (fromDate.isNotEmpty && r.date.compareTo(fromDate) < 0) return false;
+      if (toDate.isNotEmpty && r.date.compareTo(toDate) > 0) return false;
+      if (violationFilter == 'بدون تخلف' && r.hasViolation) return false;
+      if (violationFilter != 'همه' && violationFilter != 'بدون تخلف' && r.violationType.trim() != violationFilter) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final current = isFrom ? fromDate : toDate;
+    final parts = current.split('/');
+    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 1403;
+    int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
+    int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+            return AlertDialog(
+              title: Text(isFrom ? 'از تاریخ' : 'تا تاریخ'),
+              content: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: day.clamp(1, maxDay).toInt(),
+                      decoration: const InputDecoration(labelText: 'روز'),
+                      items: List.generate(maxDay, (i) => i + 1).map((d) => DropdownMenuItem(value: d, child: Text(toPersianDigits('$d')))).toList(),
+                      onChanged: (v) => setStateDialog(() => day = v ?? day),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: month,
+                      decoration: const InputDecoration(labelText: 'ماه'),
+                      items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text(toPersianDigits('$m')))).toList(),
+                      onChanged: (v) => setStateDialog(() => month = v ?? month),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: year,
+                      decoration: const InputDecoration(labelText: 'سال'),
+                      items: List.generate(30, (i) => 1390 + i).map((y) => DropdownMenuItem(value: y, child: Text(toPersianDigits('$y')))).toList(),
+                      onChanged: (v) => setStateDialog(() => year = v ?? year),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, '$year/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}'),
+                  child: const Text('انتخاب'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (result != null) {
+      setState(() {
+        if (isFrom) {
+          fromDate = result;
+        } else {
+          toDate = result;
+        }
+      });
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final records = _filtered;
+      final excel = Excel.createExcel();
+      final sheet = excel['نظارت پخش'];
+      sheet.appendRow([
+        TextCellValue('نام موزع'),
+        TextCellValue('کد موزع'),
+        TextCellValue('تاریخ'),
+        TextCellValue('شهرستان/مسیر'),
+        TextCellValue('شرح گزارش'),
+        TextCellValue('نوع تخلف'),
+        TextCellValue('تعداد مستندات'),
+      ]);
+      for (final r in records) {
+        sheet.appendRow([
+          TextCellValue(r.distributorName),
+          TextCellValue(r.distributorCode),
+          TextCellValue(r.date),
+          TextCellValue(r.cityRoute),
+          TextCellValue(r.reportText),
+          TextCellValue(r.violationType.isEmpty ? 'بدون تخلف' : r.violationType),
+          IntCellValue(r.evidences.length),
+        ]);
+      }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('empty excel');
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'نظارت_پخش_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل Excel باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final records = _filtered;
+      final font = _buildPersianPdfFont();
+      final baseStyle = pw.TextStyle(font: font, fontSize: 9);
+      final headerStyle = pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold);
+      final titleStyle = pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
+      final doc = pw.Document();
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: pw.ThemeData.withFont(base: font),
+          header: (_) => pw.Directionality(textDirection: pw.TextDirection.rtl, child: pw.Text('نظارت پخش', style: headerStyle)),
+          footer: (context) => pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.Center(child: pw.Text('صفحه ${context.pageNumber} از ${context.pagesCount}', style: pw.TextStyle(font: font, fontSize: 7))),
+          ),
+          build: (_) => [
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Text('بایگانی نظارت پخش', style: titleStyle, textAlign: pw.TextAlign.center),
+                  pw.SizedBox(height: 10),
+                  pw.Text('تعداد رکورد: ${toPersianDigits('${records.length}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 12),
+                  if (records.isNotEmpty)
+                    pw.Table.fromTextArray(
+                      headers: ['تاریخ', 'نام موزع', 'کد موزع', 'شهرستان/مسیر', 'نوع تخلف', 'شرح گزارش'],
+                      data: records.map((r) => [r.date, r.distributorName, r.distributorCode, r.cityRoute, r.violationType.isEmpty ? 'بدون تخلف' : r.violationType, r.reportText]).toList(),
+                      headerStyle: headerStyle,
+                      cellStyle: pw.TextStyle(font: font, fontSize: 7),
+                      cellAlignment: pw.Alignment.centerRight,
+                      headerAlignment: pw.Alignment.centerRight,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      final bytes = await doc.save();
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'نظارت_پخش_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل PDF باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت PDF: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = _filtered;
+    return Scaffold(
+      appBar: AppBar(title: const Text('بایگانی نظارت‌ها')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          TextField(controller: nameFilter, decoration: const InputDecoration(labelText: 'نام موزع', prefixIcon: Icon(Icons.person_search)), onChanged: (_) => setState(() {})),
+                          const SizedBox(height: 8),
+                          TextField(controller: codeFilter, decoration: const InputDecoration(labelText: 'کد موزع', prefixIcon: Icon(Icons.badge_outlined)), onChanged: (_) => setState(() {})),
+                          const SizedBox(height: 8),
+                          TextField(controller: cityFilter, decoration: const InputDecoration(labelText: 'شهرستان', prefixIcon: Icon(Icons.location_city)), onChanged: (_) => setState(() {})),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: OutlinedButton(onPressed: () => _pickDate(isFrom: true), child: Text(fromDate.isEmpty ? 'از تاریخ' : toPersianDigits(fromDate)))),
+                            const SizedBox(width: 8),
+                            Expanded(child: OutlinedButton(onPressed: () => _pickDate(isFrom: false), child: Text(toDate.isEmpty ? 'تا تاریخ' : toPersianDigits(toDate)))),
+                          ]),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            value: violationFilter,
+                            decoration: const InputDecoration(labelText: 'نوع تخلف'),
+                            items: _violationOptions.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                            onChanged: (v) => setState(() => violationFilter = v ?? 'همه'),
+                          ),
+                          if (fromDate.isNotEmpty || toDate.isNotEmpty || nameFilter.text.isNotEmpty || codeFilter.text.isNotEmpty || cityFilter.text.isNotEmpty || violationFilter != 'همه')
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: () => setState(() {
+                                  nameFilter.clear();
+                                  codeFilter.clear();
+                                  cityFilter.clear();
+                                  fromDate = '';
+                                  toDate = '';
+                                  violationFilter = 'همه';
+                                }),
+                                child: const Text('پاک‌کردن فیلترها'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: exporting ? null : _exportExcel,
+                          icon: const Icon(Icons.table_chart),
+                          label: const Text('خروجی Excel'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: exporting ? null : _exportPdf,
+                          icon: const Icon(Icons.picture_as_pdf),
+                          label: const Text('خروجی PDF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (exporting) const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: records.isEmpty
+                      ? const Center(child: Text('نظارتی یافت نشد.'))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: records.length,
+                          itemBuilder: (context, index) {
+                            final r = records[index];
+                            return Card(
+                              child: ListTile(
+                                leading: Icon(r.hasViolation ? Icons.warning_amber : Icons.check_circle, color: r.hasViolation ? InspectionManagerApp.problemMaroon : InspectionManagerApp.okGreen),
+                                title: Text('${r.distributorName} (${r.distributorCode})'),
+                                subtitle: Text('${toPersianDigits(r.date)} • ${r.cityRoute}'),
+                                trailing: const Icon(Icons.chevron_left),
+                                onTap: () async {
+                                  final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => PakhshRecordDetailsPage(record: r)));
+                                  if (result == true) _load();
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// جزئیات یک نظارت
+// ---------------------------------------------------------------------
+
+class PakhshRecordDetailsPage extends StatefulWidget {
+  final PakhshRecord record;
+  const PakhshRecordDetailsPage({super.key, required this.record});
+
+  @override
+  State<PakhshRecordDetailsPage> createState() => _PakhshRecordDetailsPageState();
+}
+
+class _PakhshRecordDetailsPageState extends State<PakhshRecordDetailsPage> {
+  late PakhshRecord current;
+  bool changed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    current = widget.record;
+  }
+
+  Future<void> _editViolationType() async {
+    final controller = TextEditingController(text: current.violationType);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('نوع تخلف'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'مثلاً: عدم رعایت قیمت، تاخیر در توزیع...'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('پاک کردن تخلف')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('ذخیره')),
+        ],
+      ),
+    );
+    if (result != null) {
+      final updated = current.copyWith(violationType: result);
+      await PakhshStorage.update(updated);
+      setState(() {
+        current = updated;
+        changed = true;
+      });
+    }
+  }
+
+  Future<void> _deleteRecord() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف نظارت'),
+        content: const Text('آیا از حذف این نظارت مطمئن هستید؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent), child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await PakhshStorage.delete(current.id);
+      if (mounted) Navigator.pop(context, true);
+    }
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 110, child: Text(label, style: const TextStyle(color: InspectionManagerApp.textSecondary))),
+          Expanded(child: Text(value.isEmpty ? '—' : value, style: const TextStyle(fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Navigator.pop(context, changed);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('جزئیات نظارت'),
+          actions: [
+            IconButton(icon: const Icon(Icons.delete_outline), onPressed: _deleteRecord),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _row('نام موزع', current.distributorName),
+                    _row('کد موزع', current.distributorCode),
+                    _row('تاریخ', toPersianDigits(current.date)),
+                    _row('شهرستان/مسیر', current.cityRoute),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('شرح گزارش', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text(current.reportText.isEmpty ? 'بدون شرح' : current.reportText),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: Icon(current.hasViolation ? Icons.warning_amber : Icons.check_circle, color: current.hasViolation ? InspectionManagerApp.problemMaroon : InspectionManagerApp.okGreen),
+                title: const Text('نوع تخلف'),
+                subtitle: Text(current.violationType.isEmpty ? 'بدون تخلف' : current.violationType),
+                trailing: const Icon(Icons.edit, size: 20),
+                onTap: _editViolationType,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('مستندات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            if (current.evidences.isEmpty)
+              const Text('مستندی ثبت نشده است.', style: TextStyle(color: InspectionManagerApp.textSecondary))
+            else
+              ...current.evidences.map((e) {
+                IconData icon = Icons.insert_drive_file;
+                if (e.type == 'image') icon = Icons.image;
+                if (e.type == 'audio') icon = Icons.audiotrack;
+                return Card(
+                  child: ListTile(
+                    leading: Icon(icon, color: InspectionManagerApp.primaryColor),
+                    title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onTap: () => openEvidence(context, e),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// گزارش‌های پخش
+// ---------------------------------------------------------------------
+
+class PakhshReportsPage extends StatefulWidget {
+  const PakhshReportsPage({super.key});
+
+  @override
+  State<PakhshReportsPage> createState() => _PakhshReportsPageState();
+}
+
+class _PakhshReportsPageState extends State<PakhshReportsPage> {
+  List<PakhshRecord> all = [];
+  bool loading = true;
+  bool exporting = false;
+  String fromDate = '';
+  String toDate = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await PakhshStorage.getAll();
+    if (!mounted) return;
+    setState(() {
+      all = data;
+      loading = false;
+    });
+  }
+
+  List<PakhshRecord> get _periodRecords {
+    if (fromDate.isEmpty && toDate.isEmpty) return all;
+    return all.where((r) {
+      if (fromDate.isNotEmpty && r.date.compareTo(fromDate) < 0) return false;
+      if (toDate.isNotEmpty && r.date.compareTo(toDate) > 0) return false;
+      return true;
+    }).toList();
+  }
+
+  Map<String, int> get _repeatViolationDistributors {
+    final records = _periodRecords.where((r) => r.hasViolation).toList();
+    final Map<String, int> counts = {};
+    for (final r in records) {
+      final key = '${r.distributorName} (${r.distributorCode})';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    counts.removeWhere((k, v) => v < 2);
+    return counts;
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final current = isFrom ? fromDate : toDate;
+    final parts = current.split('/');
+    int year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? int.parse(AppSettings.todayJalali().split('/')[0]);
+    int month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 1;
+    int day = int.tryParse(parts.length > 2 ? parts[2] : '') ?? 1;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final maxDay = month <= 6 ? 31 : (month <= 11 ? 30 : 30);
+            return AlertDialog(
+              title: Text(isFrom ? 'از تاریخ' : 'تا تاریخ'),
+              content: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: day.clamp(1, maxDay).toInt(),
+                      decoration: const InputDecoration(labelText: 'روز'),
+                      items: List.generate(maxDay, (i) => i + 1).map((d) => DropdownMenuItem(value: d, child: Text(toPersianDigits('$d')))).toList(),
+                      onChanged: (v) => setStateDialog(() => day = v ?? day),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: month,
+                      decoration: const InputDecoration(labelText: 'ماه'),
+                      items: List.generate(12, (i) => i + 1).map((m) => DropdownMenuItem(value: m, child: Text(toPersianDigits('$m')))).toList(),
+                      onChanged: (v) => setStateDialog(() => month = v ?? month),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      value: year,
+                      decoration: const InputDecoration(labelText: 'سال'),
+                      items: List.generate(30, (i) => 1390 + i).map((y) => DropdownMenuItem(value: y, child: Text(toPersianDigits('$y')))).toList(),
+                      onChanged: (v) => setStateDialog(() => year = v ?? year),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, '$year/${month.toString().padLeft(2, '0')}/${day.toString().padLeft(2, '0')}'),
+                  child: const Text('انتخاب'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (result != null) {
+      setState(() {
+        if (isFrom) {
+          fromDate = result;
+        } else {
+          toDate = result;
+        }
+      });
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final records = _periodRecords;
+      final violations = records.where((r) => r.hasViolation).toList();
+      final repeats = _repeatViolationDistributors;
+      final excel = Excel.createExcel();
+      final sheet = excel['گزارش پخش'];
+      sheet.appendRow([TextCellValue('تعداد نظارت‌ها'), IntCellValue(records.length)]);
+      sheet.appendRow([TextCellValue('تعداد تخلفات'), IntCellValue(violations.length)]);
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([TextCellValue('موزع دارای تکرار تخلف'), TextCellValue('تعداد تخلف')]);
+      for (final entry in repeats.entries) {
+        sheet.appendRow([TextCellValue(entry.key), IntCellValue(entry.value)]);
+      }
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([TextCellValue('تاریخ'), TextCellValue('نام موزع'), TextCellValue('کد موزع'), TextCellValue('شهرستان/مسیر'), TextCellValue('نوع تخلف')]);
+      for (final r in records) {
+        sheet.appendRow([TextCellValue(r.date), TextCellValue(r.distributorName), TextCellValue(r.distributorCode), TextCellValue(r.cityRoute), TextCellValue(r.violationType.isEmpty ? 'بدون تخلف' : r.violationType)]);
+      }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('empty excel');
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'گزارش_پخش_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل Excel باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final records = _periodRecords;
+      final violations = records.where((r) => r.hasViolation).toList();
+      final repeats = _repeatViolationDistributors;
+      final font = _buildPersianPdfFont();
+      final baseStyle = pw.TextStyle(font: font, fontSize: 10);
+      final headerStyle = pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold);
+      final titleStyle = pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
+      final doc = pw.Document();
+      final periodText = fromDate.isEmpty && toDate.isEmpty ? 'کل بازه' : '${fromDate.isEmpty ? '—' : toPersianDigits(fromDate)} تا ${toDate.isEmpty ? '—' : toPersianDigits(toDate)}';
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: pw.ThemeData.withFont(base: font),
+          header: (_) => pw.Directionality(textDirection: pw.TextDirection.rtl, child: pw.Text('گزارش‌های پخش', style: headerStyle)),
+          footer: (context) => pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.Center(child: pw.Text('صفحه ${context.pageNumber} از ${context.pagesCount}', style: pw.TextStyle(font: font, fontSize: 7))),
+          ),
+          build: (_) => [
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Text('گزارش‌های پخش', style: titleStyle, textAlign: pw.TextAlign.center),
+                  pw.SizedBox(height: 10),
+                  pw.Text('بازه: $periodText', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('تعداد نظارت‌ها: ${toPersianDigits('${records.length}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.Text('تعداد تخلفات: ${toPersianDigits('${violations.length}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 14),
+                  pw.Text('موزع‌های دارای تکرار تخلف', style: pw.TextStyle(font: font, fontSize: 13, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 6),
+                  if (repeats.isEmpty)
+                    pw.Text('موردی یافت نشد.', style: baseStyle, textAlign: pw.TextAlign.right)
+                  else
+                    pw.Table.fromTextArray(
+                      headers: ['موزع', 'تعداد تخلف'],
+                      data: repeats.entries.map((e) => [e.key, toPersianDigits('${e.value}')]).toList(),
+                      headerStyle: headerStyle,
+                      cellStyle: baseStyle,
+                      cellAlignment: pw.Alignment.centerRight,
+                      headerAlignment: pw.Alignment.centerRight,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      final bytes = await doc.save();
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'گزارش_پخش_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل PDF باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت PDF: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = _periodRecords;
+    final violations = records.where((r) => r.hasViolation).toList();
+    final repeats = _repeatViolationDistributors;
+    return Scaffold(
+      appBar: AppBar(title: const Text('گزارش‌های پخش')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 1.7,
+                  children: [
+                    _statCardPakhsh('تعداد نظارت‌ها', toPersianDigits('${records.length}'), Icons.playlist_add_check, InspectionManagerApp.primaryColor),
+                    _statCardPakhsh('تعداد تخلفات', toPersianDigits('${violations.length}'), Icons.warning_amber_rounded, InspectionManagerApp.accentColor),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('موزع دارای تکرار تخلف', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        if (repeats.isEmpty)
+                          const Text('موردی یافت نشد.', style: TextStyle(color: InspectionManagerApp.textSecondary))
+                        else
+                          ...repeats.entries.map((e) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(children: [
+                                  Expanded(child: Text(e.key)),
+                                  Text(toPersianDigits('${e.value}'), style: const TextStyle(color: InspectionManagerApp.problemMaroon, fontWeight: FontWeight.bold)),
+                                ]),
+                              )),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      children: [
+                        const Align(alignment: Alignment.centerRight, child: Text('بازه تاریخ (شمسی)', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          Expanded(child: OutlinedButton(onPressed: () => _pickDate(isFrom: true), child: Text(fromDate.isEmpty ? 'از تاریخ' : toPersianDigits(fromDate)))),
+                          const SizedBox(width: 8),
+                          Expanded(child: OutlinedButton(onPressed: () => _pickDate(isFrom: false), child: Text(toDate.isEmpty ? 'تا تاریخ' : toPersianDigits(toDate)))),
+                        ]),
+                        if (fromDate.isNotEmpty || toDate.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(onPressed: () => setState(() { fromDate = ''; toDate = ''; }), child: const Text('پاک‌کردن بازه')),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (exporting) const LinearProgressIndicator(),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: ElevatedButton.icon(onPressed: exporting ? null : _exportExcel, icon: const Icon(Icons.table_chart), label: const Text('خروجی Excel'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: ElevatedButton.icon(onPressed: exporting ? null : _exportPdf, icon: const Icon(Icons.picture_as_pdf), label: const Text('خروجی PDF'))),
+                ]),
+              ],
+            ),
+    );
+  }
+
+  Widget _statCardPakhsh(String title, String value, IconData icon, Color color) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: InspectionManagerApp.bgColor),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+            Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
         ),
       ),
     );
