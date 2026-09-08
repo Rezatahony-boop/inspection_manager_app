@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "931107152515",
+    "project_id": "inspection-manager-5294a",
+    "storage_bucket": "inspection-manager-5294a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931107152515:android:9110b7540685247820f1b6",
+        "android_client_info": {
+          "package_name": "com.inspection.manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLxRI7J0q1JXZnYNS76fHp5XQ_-47W9Qo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931107152515:android:3c428c5a5f5ef77720f1b6",
+        "android_client_info": {
+          "package_name": "com.samaneh.modiribazresi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLxRI7J0q1JXZnYNS76fHp5XQ_-47W9Qo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
