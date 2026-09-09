@@ -41,8 +41,21 @@ jobs:
           sed -i '/minSdk = flutter.minSdkVersion/c\        minSdk = 23' android/app/build.gradle.kts
           sed -i 's/namespace = "com.example.inspection_manager_app"/namespace = "com.samaneh.modiribazresi"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.inspection_manager_app"/applicationId = "com.samaneh.modiribazresi"/' android/app/build.gradle.kts
+
+          echo "--- android/settings.gradle.kts before edit ---"
+          cat android/settings.gradle.kts
           sed -i '/id("dev.flutter.flutter-plugin-loader")/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
+          echo "--- android/settings.gradle.kts after edit ---"
+          cat android/settings.gradle.kts
+          grep -q 'com.google.gms.google-services' android/settings.gradle.kts || (echo "::error::google-services plugin line was NOT added to settings.gradle.kts — sed pattern did not match the file's actual content shown above." && exit 1)
+
+          echo "--- android/app/build.gradle.kts before edit ---"
+          cat android/app/build.gradle.kts
           sed -i '/id("dev.flutter.flutter-gradle-plugin")/a\    id("com.google.gms.google-services")' android/app/build.gradle.kts
+          echo "--- android/app/build.gradle.kts after edit ---"
+          cat android/app/build.gradle.kts
+          grep -q 'id("com.google.gms.google-services")$' android/app/build.gradle.kts || (echo "::error::google-services plugin line was NOT added to app/build.gradle.kts — sed pattern did not match the file's actual content shown above." && exit 1)
+          grep -q 'com.samaneh.modiribazresi' android/app/build.gradle.kts || (echo "::error::applicationId/namespace was NOT updated to com.samaneh.modiribazresi — package will not match google-services.json and Firebase will crash at startup." && exit 1)
 
       - name: Remove default Flutter test
         run: |
@@ -52,6 +65,7 @@ jobs:
         working-directory: /tmp/flutter_project
         run: |
           sed -i 's/android:label="inspection_manager_app"/android:label="سامانه مدیریت بازرسی"/' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
 
       - name: Get dependencies
         working-directory: /tmp/flutter_project
