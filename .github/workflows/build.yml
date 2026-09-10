@@ -42,6 +42,18 @@ jobs:
           sed -i 's/namespace = "com.example.inspection_manager_app"/namespace = "com.samaneh.modiribazresi"/' android/app/build.gradle.kts
           sed -i 's/applicationId = "com.example.inspection_manager_app"/applicationId = "com.samaneh.modiribazresi"/' android/app/build.gradle.kts
 
+          # جابه‌جایی MainActivity.kt به مسیر پوشه‌ی جدید و اصلاح خط package داخل خودش
+          # تا با namespace/applicationId جدید هماهنگ باشد (وگرنه ClassNotFoundException می‌دهد)
+          OLD_DIR="android/app/src/main/kotlin/com/example/inspection_manager_app"
+          NEW_DIR="android/app/src/main/kotlin/com/samaneh/modiribazresi"
+          mkdir -p "$NEW_DIR"
+          mv "$OLD_DIR/MainActivity.kt" "$NEW_DIR/MainActivity.kt"
+          sed -i 's/package com.example.inspection_manager_app/package com.samaneh.modiribazresi/' "$NEW_DIR/MainActivity.kt"
+          rm -rf "android/app/src/main/kotlin/com/example"
+
+          echo "--- MainActivity.kt after move ---"
+          cat "$NEW_DIR/MainActivity.kt"
+
           echo "--- android/settings.gradle.kts before edit ---"
           cat android/settings.gradle.kts
           sed -i '/id("dev.flutter.flutter-plugin-loader")/a\    id("com.google.gms.google-services") version "4.4.2" apply false' android/settings.gradle.kts
