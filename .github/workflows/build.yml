@@ -9,6 +9,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        role: [inspector, supervisor, manager]
 
     steps:
       - name: Checkout repository
@@ -89,26 +92,28 @@ jobs:
         run: |
           dart run flutter_launcher_icons
 
-      - name: Build APK
+      # نقش (LOCKED_ROLE) در همین مرحله در باینری کامپایل می‌شود؛ هر کدام از سه اجرای
+      # ماتریکس یک APK جدا با نقش ثابت و غیرقابل‌تغییر از تنظیمات می‌سازد.
+      - name: Build APK (role=${{ matrix.role }})
         working-directory: /tmp/flutter_project
         run: |
-          flutter build apk --release
+          flutter build apk --release --dart-define=LOCKED_ROLE=${{ matrix.role }}
 
       - name: Copy APK for release
         run: |
-          cp /tmp/flutter_project/build/app/outputs/flutter-apk/app-release.apk inspection_manager_app.apk
+          cp /tmp/flutter_project/build/app/outputs/flutter-apk/app-release.apk inspection_manager_app-${{ matrix.role }}.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "نسخه build-${{ github.run_number }}"
-          files: inspection_manager_app.apk
+          files: inspection_manager_app-${{ matrix.role }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: inspection_manager_apk
+          name: inspection_manager_apk-${{ matrix.role }}
           path: /tmp/flutter_project/build/app/outputs/flutter-apk/app-release.apk
