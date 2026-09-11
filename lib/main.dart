@@ -437,6 +437,11 @@ class Inspection {
 // تنظیمات سراسری برنامه
 // =====================================================
 
+// اگر این اپ با --dart-define=LOCKED_ROLE=inspector|supervisor|manager ساخته شده باشد،
+// نقش این گوشی برای همیشه قفل است و کاربر نمی‌تواند از تنظیمات آن را عوض کند.
+const String kLockedRoleValue = String.fromEnvironment('LOCKED_ROLE', defaultValue: '');
+bool get kIsRoleLocked => kLockedRoleValue.isNotEmpty;
+
 // نقش کاربر روی این گوشی: بازرس، سرپرست یا مدیرعامل
 enum UserRole { inspector, supervisor, manager }
 
@@ -492,10 +497,15 @@ class AppSettings {
     configuredTime = _prefs!.getString(_timeKey) ?? '';
     dateAnchorGregorian = _prefs!.getString(_dateAnchorKey) ?? '';
     profileImagePath = _prefs!.getString(_profileKey) ?? '';
-    role = UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
+    // اگر نسخه قفل‌شده (ساخته‌شده با --dart-define=APP_ROLE=...) است، همیشه
+    // همان نقش ثابت اعمال می‌شود و مقدار ذخیره‌شده در تنظیمات گوشی نادیده گرفته می‌شود.
+    role = kIsRoleLocked
+        ? UserRoleLabel.fromStorage(kLockedRoleValue)
+        : UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
   }
 
   static Future<void> setRole(UserRole value) async {
+    if (kIsRoleLocked) return; // در نسخه قفل‌شده، تغییر نقش از کد امکان‌پذیر نیست
     role = value;
     await _prefs!.setString(_roleKey, value.storageValue);
   }
@@ -6227,6 +6237,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _changeRole() async {
+    if (kIsRoleLocked) return; // نسخه قفل‌شده: تغییر نقش از این صفحه ممکن نیست
     final result = await showDialog<UserRole>(
       context: context,
       builder: (_) => AlertDialog(
@@ -6425,7 +6436,11 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ]))),
         _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
-        _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: AppSettings.role.label, onTap: _changeRole),
+        // در نسخه قفل‌شده (ساخته‌شده مخصوص یک نقش)، این ردیف فقط نقش را نشان می‌دهد و قابل تغییر نیست
+        if (!kIsRoleLocked)
+          _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: AppSettings.role.label, onTap: _changeRole)
+        else
+          _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: '${AppSettings.role.label} (قفل‌شده)', onTap: () {}),
         _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور', onTap: _changePassword),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
