@@ -446,7 +446,7 @@ extension UserRoleLabel on UserRole {
       case UserRole.inspector:
         return 'بازرس';
       case UserRole.supervisor:
-        return 'سرپرست';
+        return 'بازرس حسابداری فروش';
       case UserRole.manager:
         return 'مدیرعامل';
     }
@@ -470,7 +470,7 @@ extension UserRoleLabel on UserRole {
       case UserRole.inspector:
         return 'محسن نصیری (بازرس)';
       case UserRole.supervisor:
-        return 'رضا طاحونی (سرپرست)';
+        return 'رضا طاحونی (بازرس حسابداری فروش)';
       case UserRole.manager:
         return 'مدیرعامل';
     }
@@ -777,17 +777,21 @@ class UncodedAgentRecord {
   final String id;
   final String date;
   final String agentName;
+  final String city;
   final String address;
   final String notes;
   final List<EvidenceFile> evidences;
+  final String linkedInspectionId;
 
   UncodedAgentRecord({
     required this.id,
     required this.date,
     required this.agentName,
+    required this.city,
     required this.address,
     required this.notes,
     required this.evidences,
+    this.linkedInspectionId = '',
   });
 
   Map<String, dynamic> toJson() {
@@ -795,9 +799,11 @@ class UncodedAgentRecord {
       'id': id,
       'date': date,
       'agentName': agentName,
+      'city': city,
       'address': address,
       'notes': notes,
       'evidences': evidences.map((e) => e.toJson()).toList(),
+      'linkedInspectionId': linkedInspectionId,
     };
   }
 
@@ -815,9 +821,11 @@ class UncodedAgentRecord {
           : 'legacy_${DateTime.now().millisecondsSinceEpoch}',
       date: json['date']?.toString() ?? '',
       agentName: json['agentName']?.toString() ?? '',
+      city: json['city']?.toString() ?? '',
       address: json['address']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
       evidences: evidenceList,
+      linkedInspectionId: json['linkedInspectionId']?.toString() ?? '',
     );
   }
 }
@@ -897,6 +905,14 @@ Future<String?> previewThenSaveExportFile({
   );
 }
 
+// عرض ستون‌ها را برای هر شیت اکسل تنظیم می‌کند تا متن‌های فارسی
+// (به‌خصوص نام عامل) به‌صورت هشتک (####) یا بریده نمایش داده نشوند.
+void setExcelColumnWidths(Sheet sheet, List<double> widths) {
+  for (var i = 0; i < widths.length; i++) {
+    sheet.setColumnWidth(i, widths[i]);
+  }
+}
+
 Future<Directory> getExportDirectory() async {
   final publicDownload = Directory('/storage/emulated/0/Download');
   try {
@@ -942,7 +958,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
-  UserRole selectedRole = UserRole.inspector;
+  UserRole selectedRole = UserRole.supervisor;
 
   Future<void> login() async {
     if (passwordController.text == AppSettings.passwordFor(selectedRole)) {
@@ -1014,7 +1030,7 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: Icon(Icons.person_outline),
                     border: OutlineInputBorder(),
                   ),
-                  items: UserRole.values
+                  items: const [UserRole.supervisor, UserRole.manager, UserRole.inspector]
                       .map((r) => DropdownMenuItem(value: r, child: Text(r.loginLabel)))
                       .toList(),
                   onChanged: (v) {
@@ -1207,7 +1223,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                     },
                   ),
                 DashboardButton(
-                  title: 'ثبت عملکرد روزانه',
+                  title: 'گزارش عملکرد روزانه',
                   icon: Icons.today,
                   onTap: () {
                     Navigator.push(
@@ -1346,10 +1362,8 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
   Future<void> _load() async {
     final data = await AppStorage.getInspections();
     if (!mounted) return;
-    final code = _normalizeCode(_codeController.text);
-    final filtered = code.isEmpty
-        ? <Inspection>[]
-        : data.where((x) => _normalizeCode(x.agentCode) == code).toList()
+    final query = _codeController.text.trim();
+    final filtered = query.isEmpty ? <Inspection>[] : _matchQuery(data, query)
       ..sort((a, b) => _dateKey(b.date).compareTo(_dateKey(a.date)));
     setState(() {
       _all = data;
@@ -1359,6 +1373,12 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
   }
 
   String _normalizeCode(String value) => value.trim().replaceAll(' ', '');
+
+  List<Inspection> _matchQuery(List<Inspection> data, String query) {
+    final code = _normalizeCode(query);
+    final name = query.trim();
+    return data.where((x) => _normalizeCode(x.agentCode) == code || x.agentName.trim().contains(name)).toList();
+  }
 
   int _dateKey(String date) {
     final p = date.replaceAllMapped(RegExp(r'[۰-۹٠-٩]'), (m) {
@@ -1378,10 +1398,8 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
   }
 
   void _search() {
-    final code = _normalizeCode(_codeController.text);
-    final filtered = code.isEmpty
-        ? <Inspection>[]
-        : _all.where((x) => _normalizeCode(x.agentCode) == code).toList();
+    final query = _codeController.text.trim();
+    final filtered = query.isEmpty ? <Inspection>[] : _matchQuery(_all, query);
     filtered.sort((a, b) => _dateKey(b.date).compareTo(_dateKey(a.date)));
     setState(() => _results = filtered);
   }
@@ -1433,6 +1451,7 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
     try {
       final excel = Excel.createExcel();
       final summary = excel['سوابق عامل'];
+      setExcelColumnWidths(summary, [22, 30, 22, 40]);
       final first = _results.first;
       summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
       summary.appendRow([TextCellValue('کد عامل'), TextCellValue(first.agentCode)]);
@@ -1451,6 +1470,7 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
         ]);
       }
       final details = excel['جزئیات کامل'];
+      setExcelColumnWidths(details, [26, 14, 16, 22, 16, 40]);
       details.appendRow([TextCellValue('شناسه'), TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات')]);
       for (final item in _results) {
         details.appendRow([TextCellValue(item.id), TextCellValue(item.date), TextCellValue(item.agentCode), TextCellValue(item.agentName), TextCellValue(item.city), TextCellValue(item.problems.isEmpty ? 'بدون مشکل' : item.problems)]);
@@ -1493,12 +1513,12 @@ class _AgentHistoryPageState extends State<AgentHistoryPage> {
               children: [
                 TextField(
                   controller: _codeController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: TextInputType.text,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (_) => _search(),
                   decoration: InputDecoration(
-                    labelText: 'کد عامل را وارد کنید',
-                    hintText: 'مثلاً ۱۲۳۴۵',
+                    labelText: 'کد یا نام عامل را وارد کنید',
+                    hintText: 'مثلاً ۱۲۳۴۵ یا نام عامل',
                     prefixIcon: const Icon(Icons.badge_outlined),
                     suffixIcon: IconButton(onPressed: _search, icon: const Icon(Icons.search)),
                     border: const OutlineInputBorder(),
@@ -2269,6 +2289,7 @@ class NewUncodedAgentPage extends StatefulWidget {
 class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
   final dateController = TextEditingController();
   final nameController = TextEditingController();
+  final cityController = TextEditingController();
   final addressController = TextEditingController();
   final notesController = TextEditingController();
 
@@ -2278,11 +2299,26 @@ class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
 
   bool saving = false;
   bool recording = false;
+  List<String> savedCities = [];
 
   @override
   void initState() {
     super.initState();
     dateController.text = AppSettings.todayJalali();
+    _loadSavedCities();
+  }
+
+  Future<void> _loadSavedCities() async {
+    try {
+      final data = await AppStorage.getInspections();
+      final cities = <String>{};
+      for (final item in data) {
+        final c = item.city.trim();
+        if (c.isNotEmpty) cities.add(c);
+      }
+      final sorted = cities.toList()..sort();
+      if (mounted) setState(() => savedCities = sorted);
+    } catch (_) {}
   }
 
   @override
@@ -2291,6 +2327,7 @@ class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
     audioRecorder.dispose();
     dateController.dispose();
     nameController.dispose();
+    cityController.dispose();
     addressController.dispose();
     notesController.dispose();
     super.dispose();
@@ -2400,26 +2437,52 @@ class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
 
   Future<void> save() async {
     final name = nameController.text.trim();
+    final city = cityController.text.trim();
     final address = addressController.text.trim();
     final notes = notesController.text.trim();
     if (name.isEmpty && address.isEmpty && notes.isEmpty && evidences.isEmpty) {
       showMessage('حداقل یکی از موارد را وارد کنید');
       return;
     }
+    if (city.isEmpty) {
+      showMessage('وارد کردن شهر الزامی است');
+      return;
+    }
     if (saving) return;
     setState(() => saving = true);
     try {
+      final date = dateController.text.trim();
+      final agentEvidences = List<EvidenceFile>.from(evidences);
+      final problemParts = <String>[];
+      problemParts.add('عامل بدون کد ثبت شد.');
+      if (name.isNotEmpty) problemParts.add('نام عامل: $name');
+      if (address.isNotEmpty) problemParts.add('آدرس: $address');
+      if (notes.isNotEmpty) problemParts.add('توضیحات: $notes');
+
+      final inspection = Inspection(
+        id: 'uncoded_insp_${DateTime.now().millisecondsSinceEpoch}',
+        date: date,
+        agentCode: '',
+        agentName: name.isEmpty ? 'عامل بدون کد' : name,
+        city: city,
+        problems: problemParts.join(' '),
+        evidences: agentEvidences,
+      );
+      await AppStorage.addInspection(inspection);
+
       final record = UncodedAgentRecord(
         id: 'uncoded_${DateTime.now().millisecondsSinceEpoch}',
-        date: dateController.text.trim(),
+        date: date,
         agentName: name,
+        city: city,
         address: address,
         notes: notes,
-        evidences: List<EvidenceFile>.from(evidences),
+        evidences: agentEvidences,
+        linkedInspectionId: inspection.id,
       );
       await UncodedAgentStorage.add(record);
       if (!mounted) return;
-      showMessage('عامل بدون کد با موفقیت ثبت شد');
+      showMessage('عامل بدون کد ثبت شد و به بازرسی‌های دارای مشکل همان شهر و تاریخ اضافه شد');
       Navigator.pop(context);
     } finally {
       if (mounted) setState(() => saving = false);
@@ -2444,6 +2507,58 @@ class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
         child: Column(
           children: [
             AppTextField(controller: dateController, label: 'تاریخ شمسی', icon: Icons.calendar_month),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Autocomplete<String>(
+                initialValue: TextEditingValue(text: cityController.text),
+                optionsBuilder: (TextEditingValue value) {
+                  final query = value.text.trim();
+                  if (query.isEmpty) return savedCities;
+                  return savedCities.where((c) => c.contains(query));
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    onChanged: (v) => cityController.text = v,
+                    decoration: const InputDecoration(
+                      labelText: 'شهر',
+                      prefixIcon: Icon(Icons.location_city),
+                      border: OutlineInputBorder(),
+                    ),
+                  );
+                },
+                onSelected: (selection) => cityController.text = selection,
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topRight,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width - 32,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final option = options.elementAt(index);
+                              return ListTile(
+                                leading: const Icon(Icons.location_city, size: 18),
+                                title: Text(option),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
             AppTextField(controller: nameController, label: 'نام عامل', icon: Icons.person_outline),
             AppTextField(controller: addressController, label: 'آدرس', icon: Icons.location_on_outlined),
             AppTextField(controller: notesController, label: 'توضیحات', icon: Icons.description_outlined, maxLines: 5),
@@ -2557,8 +2672,11 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
     });
   }
 
-  Future<void> _delete(String id) async {
-    await UncodedAgentStorage.delete(id);
+  Future<void> _delete(UncodedAgentRecord record) async {
+    await UncodedAgentStorage.delete(record.id);
+    if (record.linkedInspectionId.isNotEmpty) {
+      await AppStorage.deleteInspection(record.linkedInspectionId);
+    }
     await _load();
   }
 
@@ -2568,9 +2686,11 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
     try {
       final excel = Excel.createExcel();
       final sheet = excel['عاملین بدون کد'];
+      setExcelColumnWidths(sheet, [14, 22, 16, 22, 30, 14]);
       sheet.appendRow([
         TextCellValue('تاریخ'),
         TextCellValue('نام عامل'),
+        TextCellValue('شهر'),
         TextCellValue('آدرس'),
         TextCellValue('توضیحات'),
         TextCellValue('تعداد مستندات'),
@@ -2579,6 +2699,7 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
         sheet.appendRow([
           TextCellValue(r.date),
           TextCellValue(r.agentName),
+          TextCellValue(r.city),
           TextCellValue(r.address),
           TextCellValue(r.notes),
           IntCellValue(r.evidences.length),
@@ -2627,8 +2748,8 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
                   pw.SizedBox(height: 12),
                   if (records.isNotEmpty)
                     pw.Table.fromTextArray(
-                      headers: ['تاریخ', 'نام عامل', 'آدرس', 'توضیحات'],
-                      data: records.map((r) => [r.date, r.agentName, r.address, r.notes]).toList(),
+                      headers: ['تاریخ', 'نام عامل', 'شهر', 'آدرس', 'توضیحات'],
+                      data: records.map((r) => [r.date, r.agentName, r.city, r.address, r.notes]).toList(),
                       headerStyle: headerStyle,
                       cellStyle: pw.TextStyle(font: font, fontSize: 7),
                       cellAlignment: pw.Alignment.centerRight,
@@ -2694,11 +2815,11 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
                               margin: const EdgeInsets.only(bottom: 10),
                               child: ListTile(
                                 title: Text(r.agentName.isEmpty ? 'بدون نام' : r.agentName),
-                                subtitle: Text('تاریخ: ${toPersianDigits(r.date)}\nآدرس: ${r.address.isEmpty ? 'ثبت نشده' : r.address}'),
+                                subtitle: Text('تاریخ: ${toPersianDigits(r.date)}\nشهر: ${r.city.isEmpty ? 'ثبت نشده' : r.city}\nآدرس: ${r.address.isEmpty ? 'ثبت نشده' : r.address}'),
                                 isThreeLine: true,
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                  onPressed: () => _delete(r.id),
+                                  onPressed: () => _delete(r),
                                 ),
                                 onTap: () {
                                   showDialog(
@@ -2711,6 +2832,8 @@ class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text('تاریخ: ${toPersianDigits(r.date)}'),
+                                            const SizedBox(height: 6),
+                                            Text('شهر: ${r.city.isEmpty ? 'ثبت نشده' : r.city}'),
                                             const SizedBox(height: 6),
                                             Text('آدرس: ${r.address.isEmpty ? 'ثبت نشده' : r.address}'),
                                             const SizedBox(height: 6),
@@ -4928,6 +5051,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
       final date = _normalizeDate(dateController.text);
 
       final summary = excel['گزارش عملکرد روزانه'];
+      setExcelColumnWidths(summary, [26, 18, 18]);
       summary.appendRow([
         TextCellValue('سامانه مدیریت بازرسی'),
         TextCellValue(''),
@@ -4967,6 +5091,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
       }
 
       final details = excel['جزئیات بازرسی‌ها'];
+      setExcelColumnWidths(details, [14, 16, 22, 16, 40, 14]);
       details.appendRow([
         TextCellValue('تاریخ'),
         TextCellValue('کد عامل'),
@@ -5089,7 +5214,7 @@ class _DailyPerformancePageState extends State<DailyPerformancePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ثبت عملکرد روزانه'),
+        title: const Text('گزارش عملکرد روزانه'),
         actions: [
           IconButton(
             tooltip: 'خروجی Excel برای مدیر',
@@ -5626,7 +5751,6 @@ enum ReportPeriodMode { currentMonth, dateRange }
 
 class _ReportsPageState extends State<ReportsPage> {
   List<Inspection> inspections = [];
-  List<UncodedAgentRecord> uncodedAgents = [];
   bool isLoading = true;
   ReportPeriodMode periodMode = ReportPeriodMode.currentMonth;
   String selectedMonth = '';
@@ -5649,11 +5773,9 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _loadInspections() async {
     try {
       final data = await AppStorage.getInspections();
-      final agents = await UncodedAgentStorage.getAll();
       if (!mounted) return;
       setState(() {
         inspections = data;
-        uncodedAgents = agents;
         isLoading = false;
         _ensureCities();
       });
@@ -5661,7 +5783,6 @@ class _ReportsPageState extends State<ReportsPage> {
       if (!mounted) return;
       setState(() {
         inspections = [];
-        uncodedAgents = [];
         isLoading = false;
       });
     }
@@ -5767,20 +5888,6 @@ class _ReportsPageState extends State<ReportsPage> {
     final from = start <= end ? start : end;
     final to = start <= end ? end : start;
     return inspections.where((e) {
-      final key = _dateKey(e.date);
-      return key >= from && key <= to;
-    }).toList();
-  }
-
-  List<UncodedAgentRecord> get _periodUncodedAgents {
-    if (periodMode == ReportPeriodMode.currentMonth) {
-      return uncodedAgents.where((e) => _getMonth(e.date) == selectedMonth).toList();
-    }
-    final start = _dateKey(startDate);
-    final end = _dateKey(endDate);
-    final from = start <= end ? start : end;
-    final to = start <= end ? end : start;
-    return uncodedAgents.where((e) {
       final key = _dateKey(e.date);
       return key >= from && key <= to;
     }).toList();
@@ -6077,10 +6184,9 @@ class _ReportsPageState extends State<ReportsPage> {
     }
     final considered = selectedCities.isEmpty ? citiesInPeriod : selectedCities.intersection(citiesInPeriod);
     final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
-    final uncodedInPeriod = _periodUncodedAgents.length;
-    final problems = _problemCount(consideredRecords) + uncodedInPeriod;
-    final totalForPercent = consideredRecords.length + uncodedInPeriod;
-    final percent = totalForPercent == 0 ? 0.0 : (problems / totalForPercent) * 100;
+    final uncodedInPeriod = consideredRecords.where((e) => e.agentCode.trim().isEmpty).length;
+    final problems = _problemCount(consideredRecords);
+    final percent = _problemPercent(consideredRecords);
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -6100,12 +6206,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
   List<MapEntry<String, int>> _monthlyTrend() {
     final Map<String, int> counts = {};
-    for (final item in inspections) {
-      final m = _getMonth(item.date);
-      if (m.isEmpty) continue;
-      counts[m] = (counts[m] ?? 0) + 1;
-    }
-    for (final item in uncodedAgents) {
+    final records = selectedCities.isEmpty ? inspections : inspections.where((e) => selectedCities.contains(e.city.trim())).toList();
+    for (final item in records) {
       final m = _getMonth(item.date);
       if (m.isEmpty) continue;
       counts[m] = (counts[m] ?? 0) + 1;
@@ -6182,8 +6284,8 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _donutChart() {
     final records = _periodRecords;
     final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
-    final problems = _problemCount(consideredRecords) + _periodUncodedAgents.length;
-    final ok = consideredRecords.length - _problemCount(consideredRecords);
+    final problems = _problemCount(consideredRecords);
+    final ok = consideredRecords.length - problems;
     return _DonutChartCard(title: 'درصد مشکلات نسبت به بازرسی', problemCount: problems, okCount: ok);
   }
 
@@ -6276,7 +6378,8 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Widget _summary() {
-    final records = _periodRecords;
+    final periodRecords = _periodRecords;
+    final records = selectedCities.isEmpty ? periodRecords : periodRecords.where((e) => selectedCities.contains(e.city.trim())).toList();
     final problems = _problemCount(records);
     final noProblems = records.length - problems;
     return Column(
@@ -6316,8 +6419,10 @@ class _ReportsPageState extends State<ReportsPage> {
     setState(() => exporting = true);
     try {
       final excel = Excel.createExcel();
-      final records = _periodRecords;
+      final periodRecords = _periodRecords;
+      final records = selectedCities.isEmpty ? periodRecords : periodRecords.where((e) => selectedCities.contains(e.city.trim())).toList();
       final summary = excel['خلاصه گزارش'];
+      setExcelColumnWidths(summary, [22, 14, 16, 16, 40]);
       summary.appendRow([TextCellValue('سامانه مدیریت بازرسی'), TextCellValue('')]);
       summary.appendRow([TextCellValue('گزارش بازرسی'), TextCellValue('')]);
       summary.appendRow([TextCellValue('بازه گزارش'), TextCellValue(_reportTitleForFile())]);
@@ -6339,9 +6444,10 @@ class _ReportsPageState extends State<ReportsPage> {
       }
 
       final citySheet = excel['مقایسه شهرها'];
+      setExcelColumnWidths(citySheet, [22, 16, 18, 14]);
       citySheet.appendRow([TextCellValue('شهر'), TextCellValue('تعداد بازرسی'), TextCellValue('تعداد دارای مشکل'), TextCellValue('درصد مشکل')]);
       final groups = _cityGroups(records);
-      final allCities = inspections.map((e) => e.city.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
+      final allCities = records.map((e) => e.city.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
       final cityList = selectedCities.isEmpty ? allCities : (selectedCities.toList()..sort());
       for (final city in cityList) {
         final data = groups[city] ?? <Inspection>[];
@@ -6354,6 +6460,7 @@ class _ReportsPageState extends State<ReportsPage> {
       }
 
       final details = excel['جزئیات بازرسی‌ها'];
+      setExcelColumnWidths(details, [14, 16, 22, 16, 40, 14]);
       details.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('تعداد مستندات')]);
       for (final item in records) {
         details.appendRow([
@@ -6367,13 +6474,16 @@ class _ReportsPageState extends State<ReportsPage> {
       }
 
       final repeated = excel['بازرسی‌های تکراری'];
+      setExcelColumnWidths(repeated, [16, 22, 16, 40]);
       repeated.appendRow([TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('تعداد بازرسی'), TextCellValue('تاریخ‌های بازرسی')]);
       for (final entry in _repeatedGroupsForPeriod().entries) {
-        final dates = entry.value.map((x) => x.date).toList()..sort((a, b) => _dateKey(a).compareTo(_dateKey(b)));
+        final entryRecords = selectedCities.isEmpty ? entry.value : entry.value.where((e) => selectedCities.contains(e.city.trim())).toList();
+        if (entryRecords.isEmpty) continue;
+        final dates = entryRecords.map((x) => x.date).toList()..sort((a, b) => _dateKey(a).compareTo(_dateKey(b)));
         repeated.appendRow([
           TextCellValue(entry.key),
-          TextCellValue(entry.value.first.agentName),
-          IntCellValue(entry.value.length),
+          TextCellValue(entryRecords.first.agentName),
+          IntCellValue(entryRecords.length),
           TextCellValue(dates.join(' ، ')),
         ]);
       }
@@ -6400,9 +6510,10 @@ class _ReportsPageState extends State<ReportsPage> {
     if (exporting) return;
     setState(() => exporting = true);
     try {
-      final records = _periodRecords;
+      final periodRecords = _periodRecords;
+      final records = selectedCities.isEmpty ? periodRecords : periodRecords.where((e) => selectedCities.contains(e.city.trim())).toList();
       final groups = _cityGroups(records);
-      final allCities = inspections.map((e) => e.city.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
+      final allCities = records.map((e) => e.city.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
       final cities = selectedCities.isEmpty ? allCities : (selectedCities.toList()..sort());
       final font = _buildPersianPdfFont();
       final baseStyle = pw.TextStyle(font: font, fontSize: 9);
@@ -6709,6 +6820,7 @@ class _CityInspectionsPageState extends State<CityInspectionsPage> {
     try {
       final excel = Excel.createExcel();
       final sheet = excel['بازرسی‌های ${widget.city}'];
+      setExcelColumnWidths(sheet, [14, 16, 22, 40, 14]);
       sheet.appendRow([
         TextCellValue('گزارش بازرسی‌های شهر ${widget.city}'),
       ]);
@@ -6826,6 +6938,7 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
     try {
       final excel = Excel.createExcel();
       final sheet = excel['بازرسی‌های دارای مشکل'];
+      setExcelColumnWidths(sheet, [14, 16, 22, 16, 40, 14]);
       sheet.appendRow([TextCellValue('تاریخ'), TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('شرح مشکلات'), TextCellValue('تعداد مستندات')]);
       for (final item in problems) {
         sheet.appendRow([
@@ -6843,6 +6956,7 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
         if (code.isNotEmpty) agents[code] = item;
       }
       final agentSheet = excel['عامل‌های دارای مشکل'];
+      setExcelColumnWidths(agentSheet, [16, 22, 16, 16]);
       agentSheet.appendRow([TextCellValue('کد عامل'), TextCellValue('نام عامل'), TextCellValue('شهر'), TextCellValue('تعداد موارد مشکل')]);
       final counts = <String, int>{};
       for (final item in problems) counts[item.agentCode.trim()] = (counts[item.agentCode.trim()] ?? 0) + 1;
@@ -6852,13 +6966,14 @@ class _ProblemInspectionsPageState extends State<ProblemInspectionsPage> {
       final bytes = excel.save();
       if (bytes == null || bytes.isEmpty) throw Exception('Excel file is empty');
       final fileName = 'بازرسی_های_دارای_مشکل_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final savedPath = await saveExportFileToPhone(bytes: bytes, fileName: fileName);
-      if (savedPath == null || savedPath.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ذخیره فایل لغو شد.')));
-        return;
+      final savedPath = await previewThenSaveExportFile(bytes: bytes, fileName: fileName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(savedPath == null || savedPath.isEmpty
+              ? 'ذخیره فایل لغو شد.'
+              : 'خروجی Excel ابتدا باز شد و سپس در حافظه گوشی ذخیره شد.'),
+        ));
       }
-      final result = await OpenFilex.open(savedPath);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.type == ResultType.done ? 'خروجی Excel در حافظه گوشی ذخیره شد.' : 'خروجی Excel ذخیره شد.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
     } finally {
