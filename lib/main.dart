@@ -2066,7 +2066,7 @@ class _NewInspectionPageState
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Autocomplete<String>(
-                textEditingController: cityController,
+                initialValue: TextEditingValue(text: cityController.text),
                 optionsBuilder: (TextEditingValue value) {
                   final query = value.text.trim();
                   if (query.isEmpty) return savedCities;
@@ -2076,6 +2076,7 @@ class _NewInspectionPageState
                   return TextField(
                     controller: controller,
                     focusNode: focusNode,
+                    onChanged: (v) => cityController.text = v,
                     decoration: const InputDecoration(
                       labelText: 'شهر',
                       prefixIcon: Icon(Icons.location_city),
@@ -2083,29 +2084,30 @@ class _NewInspectionPageState
                     ),
                   );
                 },
+                onSelected: (selection) => cityController.text = selection,
                 optionsViewBuilder: (context, onSelected, options) {
                   return Align(
                     alignment: Alignment.topRight,
                     child: Material(
                       elevation: 4,
                       borderRadius: BorderRadius.circular(8),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: 220,
-                          width: MediaQuery.of(context).size.width - 32,
-                        ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (context, index) {
-                            final option = options.elementAt(index);
-                            return ListTile(
-                              leading: const Icon(Icons.location_city, size: 18),
-                              title: Text(option),
-                              onTap: () => onSelected(option),
-                            );
-                          },
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width - 32,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final option = options.elementAt(index);
+                              return ListTile(
+                                leading: const Icon(Icons.location_city, size: 18),
+                                title: Text(option),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
