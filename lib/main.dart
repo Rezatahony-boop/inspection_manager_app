@@ -437,11 +437,6 @@ class Inspection {
 // تنظیمات سراسری برنامه
 // =====================================================
 
-// اگر این اپ با --dart-define=LOCKED_ROLE=inspector|supervisor|manager ساخته شده باشد،
-// نقش این گوشی برای همیشه قفل است و کاربر نمی‌تواند از تنظیمات آن را عوض کند.
-const String kLockedRoleValue = String.fromEnvironment('LOCKED_ROLE', defaultValue: '');
-bool get kIsRoleLocked => kLockedRoleValue.isNotEmpty;
-
 // نقش کاربر روی این گوشی: بازرس، سرپرست یا مدیرعامل
 enum UserRole { inspector, supervisor, manager }
 
@@ -452,6 +447,30 @@ extension UserRoleLabel on UserRole {
         return 'بازرس';
       case UserRole.supervisor:
         return 'سرپرست';
+      case UserRole.manager:
+        return 'مدیرعامل';
+    }
+  }
+
+  // نام کاربری ثابت هر نقش؛ قابل تغییر از داخل برنامه نیست.
+  String get fixedName {
+    switch (this) {
+      case UserRole.inspector:
+        return 'محسن نصیری';
+      case UserRole.supervisor:
+        return 'رضا طاحونی';
+      case UserRole.manager:
+        return 'مدیرعامل';
+    }
+  }
+
+  // متنی که در صفحه ورود روی هر گزینه نام کاربری نمایش داده می‌شود
+  String get loginLabel {
+    switch (this) {
+      case UserRole.inspector:
+        return 'محسن نصیری (بازرس)';
+      case UserRole.supervisor:
+        return 'رضا طاحونی (سرپرست)';
       case UserRole.manager:
         return 'مدیرعامل';
     }
@@ -472,52 +491,72 @@ extension UserRoleLabel on UserRole {
 }
 
 class AppSettings {
-  static const _nameKey = 'inspector_name';
-  static const _passwordKey = 'app_password';
   static const _dateKey = 'configured_jalali_date';
   static const _timeKey = 'configured_time';
   static const _dateAnchorKey = 'configured_date_anchor_gregorian';
   static const _profileKey = 'profile_image_path';
   static const _roleKey = 'user_role';
+  static const _managerPasswordKey = 'password_manager';
+  static const _supervisorPasswordKey = 'password_supervisor';
+  static const _inspectorPasswordKey = 'password_inspector';
 
   static SharedPreferences? _prefs;
-  static String inspectorName = 'رضا طاحونی';
-  static String password = '1234';
+  static String managerPassword = '1234';
+  static String supervisorPassword = '1234';
+  static String inspectorPassword = '1234';
   static String configuredDate = '';
   static String configuredTime = '';
   static String dateAnchorGregorian = '';
   static String profileImagePath = '';
   static UserRole role = UserRole.inspector;
 
+  // نام کاربری ثابت نقشی که در حال حاضر با آن وارد شده‌ایم
+  static String get inspectorName => role.fixedName;
+
+  static String passwordFor(UserRole r) {
+    switch (r) {
+      case UserRole.manager:
+        return managerPassword;
+      case UserRole.supervisor:
+        return supervisorPassword;
+      case UserRole.inspector:
+        return inspectorPassword;
+    }
+  }
+
+  static Future<void> setPasswordFor(UserRole r, String value) async {
+    switch (r) {
+      case UserRole.manager:
+        managerPassword = value;
+        await _prefs!.setString(_managerPasswordKey, value);
+        break;
+      case UserRole.supervisor:
+        supervisorPassword = value;
+        await _prefs!.setString(_supervisorPasswordKey, value);
+        break;
+      case UserRole.inspector:
+        inspectorPassword = value;
+        await _prefs!.setString(_inspectorPasswordKey, value);
+        break;
+    }
+  }
+
   static Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
-    inspectorName = _prefs!.getString(_nameKey) ?? 'رضا طاحونی';
-    password = _prefs!.getString(_passwordKey) ?? '1234';
+    managerPassword = _prefs!.getString(_managerPasswordKey) ?? '1234';
+    supervisorPassword = _prefs!.getString(_supervisorPasswordKey) ?? '1234';
+    inspectorPassword = _prefs!.getString(_inspectorPasswordKey) ?? '1234';
     configuredDate = _prefs!.getString(_dateKey) ?? '';
     configuredTime = _prefs!.getString(_timeKey) ?? '';
     dateAnchorGregorian = _prefs!.getString(_dateAnchorKey) ?? '';
     profileImagePath = _prefs!.getString(_profileKey) ?? '';
-    // اگر نسخه قفل‌شده (ساخته‌شده با --dart-define=APP_ROLE=...) است، همیشه
-    // همان نقش ثابت اعمال می‌شود و مقدار ذخیره‌شده در تنظیمات گوشی نادیده گرفته می‌شود.
-    role = kIsRoleLocked
-        ? UserRoleLabel.fromStorage(kLockedRoleValue)
-        : UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
+    role = UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
   }
 
+  // این متد فقط هنگام ورود موفق (تشخیص نام کاربری + رمز درست) صدا زده می‌شود
   static Future<void> setRole(UserRole value) async {
-    if (kIsRoleLocked) return; // در نسخه قفل‌شده، تغییر نقش از کد امکان‌پذیر نیست
     role = value;
     await _prefs!.setString(_roleKey, value.storageValue);
-  }
-
-  static Future<void> setInspectorName(String value) async {
-    inspectorName = value.trim().isEmpty ? 'رضا طاحونی' : value.trim();
-    await _prefs!.setString(_nameKey, inspectorName);
-  }
-
-  static Future<void> setPassword(String value) async {
-    password = value;
-    await _prefs!.setString(_passwordKey, value);
   }
 
   static Future<void> setDate(String value, {DateTime? anchorDate}) async {
@@ -621,8 +660,9 @@ class AppSettings {
   }
 
   static Map<String, dynamic> exportSettings() => {
-        'inspectorName': inspectorName,
-        'password': password,
+        'managerPassword': managerPassword,
+        'supervisorPassword': supervisorPassword,
+        'inspectorPassword': inspectorPassword,
         'configuredDate': configuredDate,
         'configuredTime': configuredTime,
         'dateAnchorGregorian': dateAnchorGregorian,
@@ -631,8 +671,9 @@ class AppSettings {
       };
 
   static Future<void> restoreSettings(Map<String, dynamic> data) async {
-    await setInspectorName(data['inspectorName']?.toString() ?? 'رضا طاحونی');
-    await setPassword(data['password']?.toString() ?? '1234');
+    await setPasswordFor(UserRole.manager, data['managerPassword']?.toString() ?? '1234');
+    await setPasswordFor(UserRole.supervisor, data['supervisorPassword']?.toString() ?? '1234');
+    await setPasswordFor(UserRole.inspector, data['inspectorPassword']?.toString() ?? '1234');
     final restoredDate = data['configuredDate']?.toString() ?? '';
     final restoredAnchor = data['dateAnchorGregorian']?.toString() ?? '';
     DateTime? anchor;
@@ -647,7 +688,6 @@ class AppSettings {
     await setDate(restoredDate, anchorDate: anchor);
     await setTime(data['configuredTime']?.toString() ?? '');
     await setProfileImagePath(data['profileImagePath']?.toString() ?? '');
-    await setRole(UserRoleLabel.fromStorage(data['role']?.toString()));
   }
 }
 
@@ -902,9 +942,12 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
+  UserRole selectedRole = UserRole.inspector;
 
-  void login() {
-    if (passwordController.text == AppSettings.password) {
+  Future<void> login() async {
+    if (passwordController.text == AppSettings.passwordFor(selectedRole)) {
+      await AppSettings.setRole(selectedRole);
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -964,6 +1007,21 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 28),
+                DropdownButtonFormField<UserRole>(
+                  value: selectedRole,
+                  decoration: const InputDecoration(
+                    labelText: 'نام کاربری',
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: UserRole.values
+                      .map((r) => DropdownMenuItem(value: r, child: Text(r.loginLabel)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => selectedRole = v);
+                  },
+                ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: passwordController,
                   obscureText: true,
@@ -6900,55 +6958,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _changeName() async {
-    final controller = TextEditingController(text: AppSettings.inspectorName);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('تغییر نام بازرس'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'نام بازرس')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('ذخیره')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result != null && result.trim().isNotEmpty) {
-      await AppSettings.setInspectorName(result);
-      _nameController.text = AppSettings.inspectorName;
-      if (mounted) setState(() {});
-    }
-  }
-
-  Future<void> _changeRole() async {
-    if (kIsRoleLocked) return; // نسخه قفل‌شده: تغییر نقش از این صفحه ممکن نیست
-    final result = await showDialog<UserRole>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('نقش این گوشی'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: UserRole.values
-              .map((r) => RadioListTile<UserRole>(
-                    value: r,
-                    groupValue: AppSettings.role,
-                    title: Text(r.label),
-                    onChanged: (v) => Navigator.pop(context, v),
-                  ))
-              .toList(),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-        ],
-      ),
-    );
-    if (result != null) {
-      await AppSettings.setRole(result);
-      if (mounted) setState(() {});
-    }
-  }
-
   Future<void> _changePassword() async {
     final oldC = TextEditingController();
     final newC = TextEditingController();
@@ -6956,7 +6965,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('تغییر رمز عبور'),
+        title: const Text('تغییر رمز عبور من'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: oldC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز فعلی')),
           TextField(controller: newC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز جدید')),
@@ -6965,19 +6974,53 @@ class _SettingsPageState extends State<SettingsPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
           ElevatedButton(onPressed: () {
-            if (oldC.text != AppSettings.password || newC.text.length < 4 || newC.text != repeatC.text) return;
+            if (oldC.text != AppSettings.passwordFor(AppSettings.role) || newC.text.length < 4 || newC.text != repeatC.text) return;
             Navigator.pop(context, true);
           }, child: const Text('ذخیره')),
         ],
       ),
     );
     if (ok == true) {
-      await AppSettings.setPassword(newC.text);
+      await AppSettings.setPasswordFor(AppSettings.role, newC.text);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('رمز عبور با موفقیت تغییر کرد')));
-    } else if (mounted) {
-      // پیام فقط در صورت ورود ناقص/اشتباه لازم نیست؛ کاربر می‌تواند دوباره اقدام کند.
     }
     oldC.dispose(); newC.dispose(); repeatC.dispose();
+  }
+
+  // فقط سرپرست این متد را صدا می‌زند: تغییر/ریست رمز مدیرعامل یا بازرس بدون نیاز به دانستن رمز فعلی آن‌ها
+  Future<void> _resetPasswordFor(UserRole target) async {
+    final newC = TextEditingController();
+    final repeatC = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('تغییر رمز ${target.loginLabel}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: newC, obscureText: true, decoration: const InputDecoration(labelText: 'رمز جدید')),
+          TextField(controller: repeatC, obscureText: true, decoration: const InputDecoration(labelText: 'تکرار رمز جدید')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () {
+            if (newC.text.length < 4 || newC.text != repeatC.text) return;
+            Navigator.pop(context, true);
+          }, child: const Text('ذخیره')),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await AppSettings.setPasswordFor(target, newC.text);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('رمز ${target.loginLabel} با موفقیت تغییر کرد')));
+    }
+    newC.dispose(); repeatC.dispose();
+  }
+
+  void _logout() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
   }
 
   Future<String?> _pickJalaliDate({String? initial}) async {
@@ -7120,13 +7163,13 @@ class _SettingsPageState extends State<SettingsPage> {
             IconButton(onPressed: _pickProfileImage, icon: const Icon(Icons.edit, color: Color(0xFF19B5A5))),
           ]),
         ]))),
-        _tile(icon: Icons.person_outline, title: 'تغییر نام بازرس', subtitle: AppSettings.inspectorName, onTap: _changeName),
-        // در نسخه قفل‌شده (ساخته‌شده مخصوص یک نقش)، این ردیف فقط نقش را نشان می‌دهد و قابل تغییر نیست
-        if (!kIsRoleLocked)
-          _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: AppSettings.role.label, onTap: _changeRole)
-        else
-          _tile(icon: Icons.badge_outlined, title: 'نقش این گوشی', subtitle: '${AppSettings.role.label} (قفل‌شده)', onTap: () {}),
-        _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور', onTap: _changePassword),
+        _tile(icon: Icons.badge_outlined, title: 'نام کاربری', subtitle: '${AppSettings.inspectorName} (${AppSettings.role.label})', onTap: () {}),
+        _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور من', onTap: _changePassword),
+        if (AppSettings.role == UserRole.supervisor) ...[
+          _tile(icon: Icons.admin_panel_settings_outlined, title: 'تغییر رمز مدیرعامل', onTap: () => _resetPasswordFor(UserRole.manager)),
+          _tile(icon: Icons.admin_panel_settings_outlined, title: 'تغییر رمز ${UserRole.inspector.loginLabel}', onTap: () => _resetPasswordFor(UserRole.inspector)),
+        ],
+        _tile(icon: Icons.logout, title: 'خروج / تغییر کاربر', onTap: _logout),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('تنظیم تاریخ و زمان', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
