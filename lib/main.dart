@@ -730,6 +730,94 @@ class AppStorage {
 }
 
 // =====================================================
+// مدل عامل بدون کد
+// =====================================================
+
+class UncodedAgentRecord {
+  final String id;
+  final String date;
+  final String agentName;
+  final String address;
+  final String notes;
+  final List<EvidenceFile> evidences;
+
+  UncodedAgentRecord({
+    required this.id,
+    required this.date,
+    required this.agentName,
+    required this.address,
+    required this.notes,
+    required this.evidences,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'date': date,
+      'agentName': agentName,
+      'address': address,
+      'notes': notes,
+      'evidences': evidences.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  factory UncodedAgentRecord.fromJson(Map<String, dynamic> json) {
+    final evidenceData = json['evidences'];
+    List<EvidenceFile> evidenceList = [];
+    if (evidenceData is List) {
+      evidenceList = evidenceData
+          .map((item) => EvidenceFile.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    }
+    return UncodedAgentRecord(
+      id: (json['id']?.toString().trim().isNotEmpty ?? false)
+          ? json['id'].toString()
+          : 'legacy_${DateTime.now().millisecondsSinceEpoch}',
+      date: json['date']?.toString() ?? '',
+      agentName: json['agentName']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+      notes: json['notes']?.toString() ?? '',
+      evidences: evidenceList,
+    );
+  }
+}
+
+class UncodedAgentStorage {
+  static const String _key = 'uncoded_agents';
+
+  static Future<List<UncodedAgentRecord>> getAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_key);
+    if (data == null || data.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(data);
+      return decoded
+          .map((item) => UncodedAgentRecord.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> _saveAll(List<UncodedAgentRecord> records) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, jsonEncode(records.map((e) => e.toJson()).toList()));
+  }
+
+  static Future<void> add(UncodedAgentRecord record) async {
+    final records = await getAll();
+    records.insert(0, record);
+    await _saveAll(records);
+  }
+
+  static Future<void> delete(String id) async {
+    final records = await getAll();
+    records.removeWhere((item) => item.id == id);
+    await _saveAll(records);
+  }
+}
+
+// =====================================================
 // پوشه مستندات
 // =====================================================
 
@@ -1043,6 +1131,19 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                         context,
                         MaterialPageRoute(
                           builder: (_) => const NewInspectionPage(),
+                        ),
+                      );
+                    },
+                  ),
+                if (role != UserRole.manager)
+                  DashboardButton(
+                    title: 'ثبت عامل بدون کد',
+                    icon: Icons.person_off_outlined,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NewUncodedAgentPage(),
                         ),
                       );
                     },
@@ -1426,12 +1527,27 @@ class _NewInspectionPageState
   bool saving = false;
   bool recording = false;
   String? recordingPath;
+  List<String> savedCities = [];
 
   @override
   void initState() {
     super.initState();
 
     dateController.text = AppSettings.todayJalali();
+    _loadSavedCities();
+  }
+
+  Future<void> _loadSavedCities() async {
+    try {
+      final data = await AppStorage.getInspections();
+      final cities = <String>{};
+      for (final item in data) {
+        final c = item.city.trim();
+        if (c.isNotEmpty) cities.add(c);
+      }
+      final sorted = cities.toList()..sort();
+      if (mounted) setState(() => savedCities = sorted);
+    } catch (_) {}
   }
 
   // ---------------------------------------------------
@@ -1947,10 +2063,55 @@ class _NewInspectionPageState
               icon: Icons.store,
             ),
 
-            AppTextField(
-              controller: cityController,
-              label: 'شهر',
-              icon: Icons.location_city,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Autocomplete<String>(
+                textEditingController: cityController,
+                optionsBuilder: (TextEditingValue value) {
+                  final query = value.text.trim();
+                  if (query.isEmpty) return savedCities;
+                  return savedCities.where((c) => c.contains(query));
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(
+                      labelText: 'شهر',
+                      prefixIcon: Icon(Icons.location_city),
+                      border: OutlineInputBorder(),
+                    ),
+                  );
+                },
+                optionsViewBuilder: (context, onSelected, options) {
+                  return Align(
+                    alignment: Alignment.topRight,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 220,
+                          width: MediaQuery.of(context).size.width - 32,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final option = options.elementAt(index);
+                            return ListTile(
+                              leading: const Icon(Icons.location_city, size: 18),
+                              title: Text(option),
+                              onTap: () => onSelected(option),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
 
             AppTextField(
@@ -2030,6 +2191,488 @@ class AppTextField extends StatelessWidget {
               const OutlineInputBorder(),
         ),
       ),
+    );
+  }
+}
+
+// =====================================================
+// ثبت عامل بدون کد
+// =====================================================
+
+class NewUncodedAgentPage extends StatefulWidget {
+  const NewUncodedAgentPage({super.key});
+
+  @override
+  State<NewUncodedAgentPage> createState() => _NewUncodedAgentPageState();
+}
+
+class _NewUncodedAgentPageState extends State<NewUncodedAgentPage> {
+  final dateController = TextEditingController();
+  final nameController = TextEditingController();
+  final addressController = TextEditingController();
+  final notesController = TextEditingController();
+
+  final ImagePicker imagePicker = ImagePicker();
+  final AudioRecorder audioRecorder = AudioRecorder();
+  final List<EvidenceFile> evidences = [];
+
+  bool saving = false;
+  bool recording = false;
+
+  @override
+  void initState() {
+    super.initState();
+    dateController.text = AppSettings.todayJalali();
+  }
+
+  @override
+  void dispose() {
+    if (recording) audioRecorder.stop();
+    audioRecorder.dispose();
+    dateController.dispose();
+    nameController.dispose();
+    addressController.dispose();
+    notesController.dispose();
+    super.dispose();
+  }
+
+  void showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> pickGalleryImages() async {
+    try {
+      final images = await imagePicker.pickMultiImage(imageQuality: 90);
+      if (images.isEmpty) return;
+      final directory = await getEvidenceDirectory();
+      for (final image in images) {
+        final extension = image.path.split('.').last;
+        final fileName = 'uncoded_photo_${DateTime.now().millisecondsSinceEpoch}_${evidences.length}.$extension';
+        final destination = File('${directory.path}/$fileName');
+        await File(image.path).copy(destination.path);
+        evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در انتخاب عکس');
+    }
+  }
+
+  Future<void> takePhoto() async {
+    try {
+      final image = await imagePicker.pickImage(source: ImageSource.camera, imageQuality: 90);
+      if (image == null) return;
+      final directory = await getEvidenceDirectory();
+      final extension = image.path.split('.').last;
+      final fileName = 'uncoded_camera_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final destination = File('${directory.path}/$fileName');
+      await File(image.path).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'image', name: fileName));
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در گرفتن عکس');
+    }
+  }
+
+  Future<void> pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.first;
+      if (picked.path == null) {
+        showMessage('فایل قابل دسترسی نیست');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${picked.name}';
+      final destination = File('${directory.path}/$fileName');
+      await File(picked.path!).copy(destination.path);
+      evidences.add(EvidenceFile(path: destination.path, type: 'file', name: picked.name));
+      if (mounted) setState(() {});
+    } catch (_) {
+      showMessage('خطا در انتخاب فایل');
+    }
+  }
+
+  Future<void> startRecording() async {
+    try {
+      final hasPermission = await audioRecorder.hasPermission();
+      if (!hasPermission) {
+        showMessage('اجازه استفاده از میکروفون داده نشد');
+        return;
+      }
+      final directory = await getEvidenceDirectory();
+      final path = '${directory.path}/uncoded_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() => recording = true);
+    } catch (_) {
+      showMessage('خطا در شروع ضبط صدا');
+    }
+  }
+
+  Future<void> stopRecording() async {
+    try {
+      final path = await audioRecorder.stop();
+      if (mounted) setState(() => recording = false);
+      if (path != null && path.isNotEmpty) {
+        evidences.add(EvidenceFile(path: path, type: 'audio', name: 'فایل صوتی'));
+        if (mounted) setState(() {});
+      }
+    } catch (_) {
+      if (mounted) setState(() => recording = false);
+      showMessage('خطا در ذخیره فایل صوتی');
+    }
+  }
+
+  Future<void> removeEvidence(int index) async {
+    final evidence = evidences[index];
+    try {
+      final file = File(evidence.path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    setState(() => evidences.removeAt(index));
+  }
+
+  Future<void> save() async {
+    final name = nameController.text.trim();
+    final address = addressController.text.trim();
+    final notes = notesController.text.trim();
+    if (name.isEmpty && address.isEmpty && notes.isEmpty && evidences.isEmpty) {
+      showMessage('حداقل یکی از موارد را وارد کنید');
+      return;
+    }
+    if (saving) return;
+    setState(() => saving = true);
+    try {
+      final record = UncodedAgentRecord(
+        id: 'uncoded_${DateTime.now().millisecondsSinceEpoch}',
+        date: dateController.text.trim(),
+        agentName: name,
+        address: address,
+        notes: notes,
+        evidences: List<EvidenceFile>.from(evidences),
+      );
+      await UncodedAgentStorage.add(record);
+      if (!mounted) return;
+      showMessage('عامل بدون کد با موفقیت ثبت شد');
+      Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ثبت عامل بدون کد'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'لیست عاملین بدون کد',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UncodedAgentArchivePage())),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            AppTextField(controller: dateController, label: 'تاریخ شمسی', icon: Icons.calendar_month),
+            AppTextField(controller: nameController, label: 'نام عامل', icon: Icons.person_outline),
+            AppTextField(controller: addressController, label: 'آدرس', icon: Icons.location_on_outlined),
+            AppTextField(controller: notesController, label: 'توضیحات', icon: Icons.description_outlined, maxLines: 5),
+            Card(
+              color: const Color(0xFF102238),
+              margin: const EdgeInsets.only(bottom: 12, top: 4),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.attach_file, color: Color(0xFF19B5A5)),
+                        SizedBox(width: 8),
+                        Text('مستندات', style: TextStyle(color: Color(0xFF19B5A5), fontSize: 18, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(onPressed: pickGalleryImages, icon: const Icon(Icons.photo_library), label: const Text('گالری')),
+                        ElevatedButton.icon(onPressed: takePhoto, icon: const Icon(Icons.camera_alt), label: const Text('دوربین')),
+                        ElevatedButton.icon(onPressed: pickFile, icon: const Icon(Icons.attach_file), label: const Text('فایل')),
+                        ElevatedButton.icon(
+                          onPressed: recording ? stopRecording : startRecording,
+                          icon: Icon(recording ? Icons.stop_circle : Icons.mic),
+                          label: Text(recording ? 'توقف ضبط' : 'ضبط صدا'),
+                          style: recording ? ElevatedButton.styleFrom(backgroundColor: Colors.redAccent) : null,
+                        ),
+                      ],
+                    ),
+                    if (recording) ...[
+                      const SizedBox(height: 10),
+                      const Row(children: [
+                        Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 14),
+                        SizedBox(width: 8),
+                        Text('در حال ضبط صدا...', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                      ]),
+                    ],
+                    const SizedBox(height: 12),
+                    if (evidences.isEmpty)
+                      const Text('هنوز مستندی اضافه نشده است.', style: TextStyle(color: InspectionManagerApp.textSecondary))
+                    else
+                      ...List.generate(evidences.length, (index) {
+                        final evidence = evidences[index];
+                        IconData icon = Icons.insert_drive_file;
+                        if (evidence.type == 'image') icon = Icons.image;
+                        if (evidence.type == 'audio') icon = Icons.audiotrack;
+                        return Card(
+                          child: ListTile(
+                            leading: Icon(icon, color: InspectionManagerApp.primaryColor),
+                            title: Text(evidence.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () => removeEvidence(index)),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: saving ? null : save,
+                icon: saving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.save),
+                label: Text(saving ? 'در حال ذخیره...' : 'ثبت عامل بدون کد'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================
+// لیست عاملین بدون کد
+// =====================================================
+
+class UncodedAgentArchivePage extends StatefulWidget {
+  const UncodedAgentArchivePage({super.key});
+
+  @override
+  State<UncodedAgentArchivePage> createState() => _UncodedAgentArchivePageState();
+}
+
+class _UncodedAgentArchivePageState extends State<UncodedAgentArchivePage> {
+  List<UncodedAgentRecord> records = [];
+  bool loading = true;
+  bool exporting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await UncodedAgentStorage.getAll();
+    if (!mounted) return;
+    setState(() {
+      records = data;
+      loading = false;
+    });
+  }
+
+  Future<void> _delete(String id) async {
+    await UncodedAgentStorage.delete(id);
+    await _load();
+  }
+
+  Future<void> _exportExcel() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['عاملین بدون کد'];
+      sheet.appendRow([
+        TextCellValue('تاریخ'),
+        TextCellValue('نام عامل'),
+        TextCellValue('آدرس'),
+        TextCellValue('توضیحات'),
+        TextCellValue('تعداد مستندات'),
+      ]);
+      for (final r in records) {
+        sheet.appendRow([
+          TextCellValue(r.date),
+          TextCellValue(r.agentName),
+          TextCellValue(r.address),
+          TextCellValue(r.notes),
+          IntCellValue(r.evidences.length),
+        ]);
+      }
+      final bytes = excel.save();
+      if (bytes == null || bytes.isEmpty) throw Exception('empty excel');
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'عاملین_بدون_کد_${DateTime.now().millisecondsSinceEpoch}.xlsx');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل Excel باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت Excel: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (exporting) return;
+    setState(() => exporting = true);
+    try {
+      final font = _buildPersianPdfFont();
+      final baseStyle = pw.TextStyle(font: font, fontSize: 9);
+      final headerStyle = pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold);
+      final titleStyle = pw.TextStyle(font: font, fontSize: 18, fontWeight: pw.FontWeight.bold);
+      final doc = pw.Document();
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: pw.ThemeData.withFont(base: font),
+          header: (_) => pw.Directionality(textDirection: pw.TextDirection.rtl, child: pw.Text('عاملین بدون کد', style: headerStyle)),
+          footer: (context) => pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.Center(child: pw.Text('صفحه ${context.pageNumber} از ${context.pagesCount}', style: pw.TextStyle(font: font, fontSize: 7))),
+          ),
+          build: (_) => [
+            pw.Directionality(
+              textDirection: pw.TextDirection.rtl,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Text('لیست عاملین بدون کد', style: titleStyle, textAlign: pw.TextAlign.center),
+                  pw.SizedBox(height: 10),
+                  pw.Text('تعداد رکورد: ${toPersianDigits('${records.length}')}', style: baseStyle, textAlign: pw.TextAlign.right),
+                  pw.SizedBox(height: 12),
+                  if (records.isNotEmpty)
+                    pw.Table.fromTextArray(
+                      headers: ['تاریخ', 'نام عامل', 'آدرس', 'توضیحات'],
+                      data: records.map((r) => [r.date, r.agentName, r.address, r.notes]).toList(),
+                      headerStyle: headerStyle,
+                      cellStyle: pw.TextStyle(font: font, fontSize: 7),
+                      cellAlignment: pw.Alignment.centerRight,
+                      headerAlignment: pw.Alignment.centerRight,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      final bytes = await doc.save();
+      final path = await previewThenSaveExportFile(bytes: bytes, fileName: 'عاملین_بدون_کد_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(path == null ? 'ذخیره فایل لغو شد.' : 'فایل PDF باز و در حافظه گوشی ذخیره شد.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ساخت PDF: $e')));
+    } finally {
+      if (mounted) setState(() => exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('لیست عاملین بدون کد')),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: exporting ? null : _exportExcel,
+                          icon: const Icon(Icons.table_chart),
+                          label: const Text('خروجی Excel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: exporting ? null : _exportPdf,
+                          icon: const Icon(Icons.picture_as_pdf),
+                          label: const Text('خروجی PDF'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: records.isEmpty
+                      ? const Center(child: Text('هنوز عامل بدون کدی ثبت نشده است.', style: TextStyle(color: InspectionManagerApp.textSecondary)))
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          itemCount: records.length,
+                          itemBuilder: (context, index) {
+                            final r = records[index];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: ListTile(
+                                title: Text(r.agentName.isEmpty ? 'بدون نام' : r.agentName),
+                                subtitle: Text('تاریخ: ${toPersianDigits(r.date)}\nآدرس: ${r.address.isEmpty ? 'ثبت نشده' : r.address}'),
+                                isThreeLine: true,
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                  onPressed: () => _delete(r.id),
+                                ),
+                                onTap: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (_) => AlertDialog(
+                                      title: Text(r.agentName.isEmpty ? 'بدون نام' : r.agentName),
+                                      content: SingleChildScrollView(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text('تاریخ: ${toPersianDigits(r.date)}'),
+                                            const SizedBox(height: 6),
+                                            Text('آدرس: ${r.address.isEmpty ? 'ثبت نشده' : r.address}'),
+                                            const SizedBox(height: 6),
+                                            Text('توضیحات: ${r.notes.isEmpty ? 'ثبت نشده' : r.notes}'),
+                                            const SizedBox(height: 6),
+                                            Text('تعداد مستندات: ${toPersianDigits('${r.evidences.length}')}'),
+                                          ],
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('بستن')),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -4923,6 +5566,7 @@ enum ReportPeriodMode { currentMonth, dateRange }
 
 class _ReportsPageState extends State<ReportsPage> {
   List<Inspection> inspections = [];
+  List<UncodedAgentRecord> uncodedAgents = [];
   bool isLoading = true;
   ReportPeriodMode periodMode = ReportPeriodMode.currentMonth;
   String selectedMonth = '';
@@ -4945,9 +5589,11 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _loadInspections() async {
     try {
       final data = await AppStorage.getInspections();
+      final agents = await UncodedAgentStorage.getAll();
       if (!mounted) return;
       setState(() {
         inspections = data;
+        uncodedAgents = agents;
         isLoading = false;
         _ensureCities();
       });
@@ -4955,6 +5601,7 @@ class _ReportsPageState extends State<ReportsPage> {
       if (!mounted) return;
       setState(() {
         inspections = [];
+        uncodedAgents = [];
         isLoading = false;
       });
     }
@@ -5060,6 +5707,20 @@ class _ReportsPageState extends State<ReportsPage> {
     final from = start <= end ? start : end;
     final to = start <= end ? end : start;
     return inspections.where((e) {
+      final key = _dateKey(e.date);
+      return key >= from && key <= to;
+    }).toList();
+  }
+
+  List<UncodedAgentRecord> get _periodUncodedAgents {
+    if (periodMode == ReportPeriodMode.currentMonth) {
+      return uncodedAgents.where((e) => _getMonth(e.date) == selectedMonth).toList();
+    }
+    final start = _dateKey(startDate);
+    final end = _dateKey(endDate);
+    final from = start <= end ? start : end;
+    final to = start <= end ? end : start;
+    return uncodedAgents.where((e) {
       final key = _dateKey(e.date);
       return key >= from && key <= to;
     }).toList();
@@ -5356,8 +6017,10 @@ class _ReportsPageState extends State<ReportsPage> {
     }
     final considered = selectedCities.isEmpty ? citiesInPeriod : selectedCities.intersection(citiesInPeriod);
     final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
-    final problems = _problemCount(consideredRecords);
-    final percent = _problemPercent(consideredRecords);
+    final uncodedInPeriod = _periodUncodedAgents.length;
+    final problems = _problemCount(consideredRecords) + uncodedInPeriod;
+    final totalForPercent = consideredRecords.length + uncodedInPeriod;
+    final percent = totalForPercent == 0 ? 0.0 : (problems / totalForPercent) * 100;
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -5370,6 +6033,7 @@ class _ReportsPageState extends State<ReportsPage> {
         _statCard(title: 'تعداد بازرسی‌ها', value: _toPersian('${consideredRecords.length}'), icon: Icons.assignment_outlined),
         _statCard(title: 'تعداد مشکلات', value: _toPersian('$problems'), icon: Icons.warning_amber_rounded, accentColor: InspectionManagerApp.accentColor),
         _statCard(title: 'درصد مشکلات', value: '${_toPersian(percent.clamp(0, 100).toStringAsFixed(0))}٪', icon: Icons.percent, accentColor: InspectionManagerApp.accentColor),
+        _statCard(title: 'تعداد عاملین بدون کد', value: _toPersian('$uncodedInPeriod'), icon: Icons.person_off_outlined, accentColor: InspectionManagerApp.accentColor),
       ],
     );
   }
@@ -5381,6 +6045,11 @@ class _ReportsPageState extends State<ReportsPage> {
       if (m.isEmpty) continue;
       counts[m] = (counts[m] ?? 0) + 1;
     }
+    for (final item in uncodedAgents) {
+      final m = _getMonth(item.date);
+      if (m.isEmpty) continue;
+      counts[m] = (counts[m] ?? 0) + 1;
+    }
     final months = counts.keys.toList()..sort((a, b) => _monthKey(a).compareTo(_monthKey(b)));
     final last = months.length > trendMonths ? months.sublist(months.length - trendMonths) : months;
     return last.map((m) => MapEntry(m, counts[m] ?? 0)).toList();
@@ -5388,6 +6057,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   Widget _trendChart() {
     final trend = _monthlyTrend();
+    const double pointSpacing = 70.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5419,16 +6089,29 @@ class _ReportsPageState extends State<ReportsPage> {
                     padding: EdgeInsets.symmetric(vertical: 30),
                     child: Center(child: Text('داده‌ای برای نمایش وجود ندارد.', style: TextStyle(color: InspectionManagerApp.textSecondary))),
                   )
-                : SizedBox(
-                    height: 190,
-                    width: double.infinity,
-                    child: CustomPaint(
-                      size: const Size(double.infinity, 190),
-                      painter: _LineChartPainter(
-                        values: trend.map((e) => e.value.toDouble()).toList(),
-                        labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
-                      ),
-                    ),
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final contentWidth = trend.length * pointSpacing;
+                      final chartWidth = contentWidth > constraints.maxWidth ? contentWidth : constraints.maxWidth;
+                      return SizedBox(
+                        height: 190,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          reverse: true,
+                          child: SizedBox(
+                            width: chartWidth,
+                            height: 190,
+                            child: CustomPaint(
+                              size: Size(chartWidth, 190),
+                              painter: _LineChartPainter(
+                                values: trend.map((e) => e.value.toDouble()).toList(),
+                                labels: trend.map((e) => _monthName(e.key).split(' ').first).toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
           ),
         ),
@@ -5439,8 +6122,8 @@ class _ReportsPageState extends State<ReportsPage> {
   Widget _donutChart() {
     final records = _periodRecords;
     final consideredRecords = selectedCities.isEmpty ? records : records.where((e) => selectedCities.contains(e.city.trim())).toList();
-    final problems = _problemCount(consideredRecords);
-    final ok = consideredRecords.length - problems;
+    final problems = _problemCount(consideredRecords) + _periodUncodedAgents.length;
+    final ok = consideredRecords.length - _problemCount(consideredRecords);
     return _DonutChartCard(title: 'درصد مشکلات نسبت به بازرسی', problemCount: problems, okCount: ok);
   }
 
