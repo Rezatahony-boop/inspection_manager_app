@@ -495,6 +495,8 @@ class AppSettings {
   static const _timeKey = 'configured_time';
   static const _dateAnchorKey = 'configured_date_anchor_gregorian';
   static const _profileKey = 'profile_image_path';
+
+  static String _profileKeyForRole(UserRole r) => 'profile_image_path_${r.storageValue}';
   static const _roleKey = 'user_role';
   static const _managerPasswordKey = 'password_manager';
   static const _supervisorPasswordKey = 'password_supervisor';
@@ -549,14 +551,21 @@ class AppSettings {
     configuredDate = _prefs!.getString(_dateKey) ?? '';
     configuredTime = _prefs!.getString(_timeKey) ?? '';
     dateAnchorGregorian = _prefs!.getString(_dateAnchorKey) ?? '';
-    profileImagePath = _prefs!.getString(_profileKey) ?? '';
     role = UserRoleLabel.fromStorage(_prefs!.getString(_roleKey));
+    final legacyProfile = _prefs!.getString(_profileKey);
+    profileImagePath = _prefs!.getString(_profileKeyForRole(role)) ?? legacyProfile ?? '';
+    if (_prefs!.getString(_profileKeyForRole(role)) == null && legacyProfile != null) {
+      // مهاجرت یک‌بارهٔ عکس پروفایل قدیمی (مشترک بین همه نقش‌ها) به نقش فعلی
+      await _prefs!.setString(_profileKeyForRole(role), legacyProfile);
+    }
   }
 
   // این متد فقط هنگام ورود موفق (تشخیص نام کاربری + رمز درست) صدا زده می‌شود
   static Future<void> setRole(UserRole value) async {
     role = value;
     await _prefs!.setString(_roleKey, value.storageValue);
+    // هر نقش عکس پروفایل مخصوص به خودش را دارد و با ورود نقش دیگر عوض نمی‌شود
+    profileImagePath = _prefs!.getString(_profileKeyForRole(role)) ?? '';
   }
 
   static Future<void> setDate(String value, {DateTime? anchorDate}) async {
@@ -628,7 +637,7 @@ class AppSettings {
 
   static Future<void> setProfileImagePath(String value) async {
     profileImagePath = value;
-    await _prefs!.setString(_profileKey, value);
+    await _prefs!.setString(_profileKeyForRole(role), value);
   }
 
   static String todayJalali() {
