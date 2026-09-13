@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:excel/excel.dart' hide TextSpan;
 import 'package:pdf/pdf.dart';
@@ -182,42 +183,39 @@ DateTime jalaliToGregorianDate(String value) {
       .replaceAll('٨', '8').replaceAll('٩', '9');
   final p = normalized.split('/');
   if (p.length != 3) return DateTime(2000, 1, 1);
-  int jy = int.tryParse(p[0]) ?? 1405;
+  final jy = int.tryParse(p[0]) ?? 1405;
   final jm = int.tryParse(p[1]) ?? 1;
   final jd = int.tryParse(p[2]) ?? 1;
-  jy -= 979;
-  var jDayNo = 365 * jy + (jy ~/ 33) * 8 + ((jy % 33) + 3) ~/ 4;
-  if (jm <= 6) {
-    jDayNo += (jm - 1) * 31;
-  } else {
-    jDayNo += (jm - 7) * 30 + 186;
+
+  // این تابع باید دقیقاً معکوسِ gregorianToJalali باشد، وگرنه هر تاریخی که
+  // کاربر در تنظیمات وارد می‌کند، چند روز جابه‌جا در بقیه‌ی برنامه نمایش
+  // داده می‌شود. برای تضمین صددرصدی هم‌خوانی، ابتدا یک تخمین اولیه زده و
+  // سپس با خودِ gregorianToJalali (که مرجع صحیح است) دقیق می‌شود.
+  final dayOfYear = jm <= 6 ? (jm - 1) * 31 + (jd - 1) : 186 + (jm - 7) * 30 + (jd - 1);
+  final yearsSinceEpoch = jy - 979;
+  final approxDays = (yearsSinceEpoch * 365.2422 + dayOfYear).round();
+  final guess = DateTime(1600, 3, 21).add(Duration(days: approxDays));
+  final target = '$jy/${jm.toString().padLeft(2, '0')}/${jd.toString().padLeft(2, '0')}';
+
+  for (var delta = -15; delta <= 15; delta++) {
+    final candidate = guess.add(Duration(days: delta));
+    if (_englishDigitsOnly(gregorianToJalali(candidate)) == target) return candidate;
   }
-  jDayNo += jd - 1;
-  var gDayNo = jDayNo + 79;
-  var gy = 1600 + 400 * (gDayNo ~/ 146097);
-  gDayNo %= 146097;
-  bool leap = true;
-  if (gDayNo >= 36525) {
-    gDayNo--;
-    gy += 100 * (gDayNo ~/ 36524);
-    gDayNo %= 36524;
-    if (gDayNo >= 365) gDayNo++; else leap = false;
+  for (var delta = -400; delta <= 400; delta++) {
+    final candidate = guess.add(Duration(days: delta));
+    if (_englishDigitsOnly(gregorianToJalali(candidate)) == target) return candidate;
   }
-  gy += 4 * (gDayNo ~/ 1461);
-  gDayNo %= 1461;
-  if (gDayNo >= 366) {
-    leap = false;
-    gDayNo--;
-    gy += gDayNo ~/ 365;
-    gDayNo %= 365;
+  return guess;
+}
+
+String _englishDigitsOnly(String value) {
+  const persian = '۰۱۲۳۴۵۶۷۸۹';
+  const english = '0123456789';
+  var result = value;
+  for (var i = 0; i < persian.length; i++) {
+    result = result.replaceAll(persian[i], english[i]);
   }
-  final monthDays = <int>[31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  var gm = 1;
-  while (gm <= 12 && gDayNo >= monthDays[gm - 1]) {
-    gDayNo -= monthDays[gm - 1];
-    gm++;
-  }
-  return DateTime(gy, gm, gDayNo + 1);
+  return result;
 }
 
 // =====================================================
@@ -501,6 +499,7 @@ class AppSettings {
   static const _managerPasswordKey = 'password_manager';
   static const _supervisorPasswordKey = 'password_supervisor';
   static const _inspectorPasswordKey = 'password_inspector';
+  static String _biometricKeyForRole(UserRole r) => 'biometric_enabled_${r.storageValue}';
 
   static SharedPreferences? _prefs;
   static String managerPassword = '1234';
@@ -541,6 +540,13 @@ class AppSettings {
         await _prefs!.setString(_inspectorPasswordKey, value);
         break;
     }
+  }
+
+  // هر نقش می‌تواند جدا از بقیه، ورود با اثر انگشت/چهره‌ی گوشی خودش را فعال/غیرفعال کند
+  static bool isBiometricEnabledFor(UserRole r) => _prefs?.getBool(_biometricKeyForRole(r)) ?? false;
+
+  static Future<void> setBiometricEnabledFor(UserRole r, bool value) async {
+    await _prefs!.setBool(_biometricKeyForRole(r), value);
   }
 
   static Future<void> load() async {
@@ -697,6 +703,37 @@ class AppSettings {
     await setDate(restoredDate, anchorDate: anchor);
     await setTime(data['configuredTime']?.toString() ?? '');
     await setProfileImagePath(data['profileImagePath']?.toString() ?? '');
+  }
+}
+
+// =====================================================
+// ورود با اثر انگشت / چهره (بیومتریک)
+// =====================================================
+
+class BiometricAuthService {
+  static final LocalAuthentication _auth = LocalAuthentication();
+
+  /// آیا گوشی اصلاً سنسور اثرانگشت/چهره دارد و قفل صفحه‌اش تنظیم شده؟
+  static Future<bool> isDeviceSupported() async {
+    try {
+      final supported = await _auth.isDeviceSupported();
+      final canCheck = await _auth.canCheckBiometrics;
+      return supported && canCheck;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// نمایش پنجره‌ی اثرانگشت/چهره‌ی خودِ گوشی و برگرداندن نتیجه (موفق/ناموفق)
+  static Future<bool> authenticate({String reason = 'برای ورود، هویت خود را تأیید کنید'}) async {
+    try {
+      return await _auth.authenticate(
+        localizedReason: reason,
+        options: const AuthenticationOptions(biometricOnly: false, stickyAuth: true),
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }
 
@@ -988,6 +1025,24 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> loginWithBiometrics() async {
+    final supported = await BiometricAuthService.isDeviceSupported();
+    if (!supported) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('گوشی شما از اثرانگشت/چهره پشتیبانی نمی‌کند یا قفلی روی آن تنظیم نشده است')));
+      return;
+    }
+    final ok = await BiometricAuthService.authenticate(reason: 'برای ورود به‌عنوان ${selectedRole.loginLabel} هویت خود را تأیید کنید');
+    if (!mounted) return;
+    if (ok) {
+      await AppSettings.setRole(selectedRole);
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const DashboardPage()));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأیید هویت ناموفق بود')));
+    }
+  }
+
   @override
   void dispose() {
     passwordController.dispose();
@@ -1069,6 +1124,18 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
+                if (AppSettings.isBiometricEnabledFor(selectedRole)) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: loginWithBiometrics,
+                      icon: const Icon(Icons.fingerprint),
+                      label: const Text('ورود با اثرانگشت / چهره', style: TextStyle(fontSize: 15)),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 22),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -7111,6 +7178,26 @@ class _SettingsPageState extends State<SettingsPage> {
     oldC.dispose(); newC.dispose(); repeatC.dispose();
   }
 
+  Future<void> _toggleBiometric(bool value) async {
+    if (value) {
+      final supported = await BiometricAuthService.isDeviceSupported();
+      if (!supported) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('گوشی شما از اثرانگشت/چهره پشتیبانی نمی‌کند یا قفلی روی آن تنظیم نشده است')));
+        return;
+      }
+      final ok = await BiometricAuthService.authenticate(reason: 'برای فعال‌سازی ورود با اثرانگشت/چهره، هویت خود را تأیید کنید');
+      if (!ok) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تأیید هویت ناموفق بود، فعال نشد')));
+        return;
+      }
+    }
+    await AppSettings.setBiometricEnabledFor(AppSettings.role, value);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value ? 'ورود با اثرانگشت/چهره فعال شد' : 'ورود با اثرانگشت/چهره غیرفعال شد')));
+    }
+  }
+
   // فقط سرپرست این متد را صدا می‌زند: تغییر/ریست رمز مدیرعامل یا بازرس بدون نیاز به دانستن رمز فعلی آن‌ها
   Future<void> _resetPasswordFor(UserRole target) async {
     final newC = TextEditingController();
@@ -7289,6 +7376,15 @@ class _SettingsPageState extends State<SettingsPage> {
         ]))),
         _tile(icon: Icons.badge_outlined, title: 'نام کاربری', subtitle: '${AppSettings.inspectorName} (${AppSettings.role.label})', onTap: () {}),
         _tile(icon: Icons.lock_outline, title: 'تغییر رمز عبور من', onTap: _changePassword),
+        Card(
+          child: SwitchListTile(
+            secondary: const Icon(Icons.fingerprint, color: Color(0xFF19B5A5)),
+            title: const Text('ورود با اثرانگشت / چهره'),
+            subtitle: const Text('با استفاده از قفل خودِ گوشی، به‌جای رمز عبور وارد شوید'),
+            value: AppSettings.isBiometricEnabledFor(AppSettings.role),
+            onChanged: _busy ? null : _toggleBiometric,
+          ),
+        ),
         if (AppSettings.role == UserRole.supervisor) ...[
           _tile(icon: Icons.admin_panel_settings_outlined, title: 'تغییر رمز مدیرعامل', onTap: () => _resetPasswordFor(UserRole.manager)),
           _tile(icon: Icons.admin_panel_settings_outlined, title: 'تغییر رمز ${UserRole.inspector.loginLabel}', onTap: () => _resetPasswordFor(UserRole.inspector)),
