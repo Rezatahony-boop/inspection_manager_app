@@ -51,6 +51,12 @@ jobs:
           sed -i 's/package com.example.inspection_manager_app/package com.samaneh.modiribazresi/' "$NEW_DIR/MainActivity.kt"
           rm -rf "android/app/src/main/kotlin/com/example"
 
+          # قفل ورود با اثر انگشت/چهره (پکیج local_auth) نیاز دارد MainActivity
+          # به‌جای FlutterActivity از FlutterFragmentActivity ارث‌بری کند
+          sed -i 's/import io.flutter.embedding.android.FlutterActivity/import io.flutter.embedding.android.FlutterFragmentActivity/' "$NEW_DIR/MainActivity.kt"
+          sed -i 's/class MainActivity: FlutterActivity()/class MainActivity: FlutterFragmentActivity()/' "$NEW_DIR/MainActivity.kt"
+          sed -i 's/class MainActivity : FlutterActivity()/class MainActivity : FlutterFragmentActivity()/' "$NEW_DIR/MainActivity.kt"
+
           echo "--- MainActivity.kt after move ---"
           cat "$NEW_DIR/MainActivity.kt"
 
@@ -78,6 +84,8 @@ jobs:
         run: |
           sed -i 's/android:label="inspection_manager_app"/android:label="سامانه مدیریت بازرسی"/' android/app/src/main/AndroidManifest.xml
           sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\    <uses-permission android:name="android.permission.USE_FINGERPRINT" />' android/app/src/main/AndroidManifest.xml
 
       - name: Get dependencies
         working-directory: /tmp/flutter_project
